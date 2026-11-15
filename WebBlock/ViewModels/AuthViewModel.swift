@@ -7,8 +7,11 @@ final class AuthViewModel {
     var email = ""
     var password = ""
     var showGoogleChooser = false
+    var showForgotPassword = false
     var isLoading = false
     var errorMessage: String?
+    /// Set once the owner taps "Sign in", so missing fields are explained only after they try.
+    var attempted = false
 
     private let service: WebBlockService
     init(service: WebBlockService = ServiceLocator.current) { self.service = service }
@@ -17,10 +20,16 @@ final class AuthViewModel {
         let parts = email.split(separator: "@", omittingEmptySubsequences: false)
         return parts.count == 2 && !parts[0].isEmpty && parts[1].contains(".") && !email.contains(" ")
     }
-    var emailError: String? { email.isEmpty || isEmailValid ? nil : "Enter a valid email address." }
+    var emailError: String? {
+        if email.isEmpty { return attempted ? "Enter your email address." : nil }
+        return isEmailValid ? nil : "Enter a valid email address."
+    }
+    var passwordError: String? { attempted && password.isEmpty ? "Enter your password." : nil }
     var canSignIn: Bool { isEmailValid && !password.isEmpty && !isLoading }
 
     func signIn(appState: AppState) async {
+        attempted = true
+        guard isEmailValid, !password.isEmpty else { return }
         await run { appState.signedIn(try await service.signIn(email: email, password: password)) }
     }
 

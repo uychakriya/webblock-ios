@@ -11,12 +11,13 @@ struct ProductDraft: Identifiable, Hashable {
     var description = ""
     var priceText = ""
     var photoData: Data?
+    var imageName: String?
 
     init() {}
     init(_ product: Product) {
         id = product.id; isNew = false
         name = product.name; category = product.category; description = product.description
-        priceText = "\(product.price)"; photoData = product.photoData
+        priceText = "\(product.price)"; photoData = product.photoData; imageName = product.imageName
     }
 
     var price: Decimal? { Decimal(string: priceText.replacingOccurrences(of: ",", with: ".")) }
@@ -27,7 +28,7 @@ struct ProductDraft: Identifiable, Hashable {
 
     var product: Product {
         Product(id: id, name: name.trimmingCharacters(in: .whitespaces), category: category,
-                description: description, price: price ?? 0, photoData: photoData)
+                description: description, price: price ?? 0, photoData: photoData, imageName: imageName)
     }
 }
 
@@ -56,10 +57,12 @@ final class ProductsViewModel {
         self.service = service
     }
 
+    /// The categories this website actually uses, in the order its products introduce them,
+    /// plus any the owner just created. A website with no products yet starts from a florist-style default.
     var categories: [String] {
-        let base = ["Flowers", "Bouquets", "Gifts", "Events"]
-        let extra = Set(products.map(\.category)).union(customCategories).subtracting(base).sorted()
-        return base + extra
+        var ordered: [String] = []
+        for category in products.map(\.category) + customCategories where !ordered.contains(category) { ordered.append(category) }
+        return ordered.isEmpty ? ["Flowers", "Bouquets", "Gifts", "Events"] : ordered
     }
 
     var filtered: [Product] {
@@ -166,6 +169,15 @@ final class BusinessInfoViewModel {
 
     func save() async {
         guard let draft else { return }
+        if draft.description.trimmingCharacters(in: .whitespaces).isEmpty {
+            toast = Toast(kind: .error, title: "Add a description", message: "Tell customers what your business does."); return
+        }
+        if draft.phone.trimmingCharacters(in: .whitespaces).isEmpty {
+            toast = Toast(kind: .error, title: "Add a phone number", message: "Customers use it to reach you."); return
+        }
+        if !draft.email.contains("@") {
+            toast = Toast(kind: .error, title: "Check your email", message: "Enter a valid email address."); return
+        }
         isSaving = true
         defer { isSaving = false }
         do {

@@ -63,6 +63,10 @@ final class NotificationsViewModel {
         for index in items.indices { items[index].isUnread = false }
     }
 
+    func markRead(_ id: UUID) {
+        if let index = items.firstIndex(where: { $0.id == id }) { items[index].isUnread = false }
+    }
+
     func reset() {
         items = []; state = .idle; showUnreadOnly = false
     }

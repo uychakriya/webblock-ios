@@ -18,6 +18,10 @@ protocol WebBlockService: Sendable {
     // Sign in (accounts are created on the WebBlock website, not in the app)
     func signIn(email: String, password: String) async throws -> UserProfile
     func signInWithGoogle() async throws -> UserProfile
+    /// Emails a password-reset link to the account. Replace the mock with the real endpoint.
+    func requestPasswordReset(email: String) async throws
+    func verifyResetCode(email: String, code: String) async throws
+    func resetPassword(email: String, code: String, newPassword: String) async throws
 
     // The owner's websites and notifications
     func websites() async throws -> [Website]

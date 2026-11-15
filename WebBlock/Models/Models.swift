@@ -24,6 +24,8 @@ enum PlanTier: String, CaseIterable, Identifiable, Hashable, Sendable {
     var maxProducts: Int {
         switch self { case .freeTrial, .plus: 30; case .pro: 200; case .ultra: 1000 }
     }
+    /// Product photos allowed: twice the product limit.
+    var maxPhotos: Int { maxProducts * 2 }
     /// Pro and Ultra show the activity log on the Monitor page.
     var showsActivityLog: Bool { self == .pro || self == .ultra }
 }
@@ -50,6 +52,8 @@ struct Website: Identifiable, Hashable, Sendable {
     var businessType: String
     var status: WebsiteStatus
     var url: String?
+    /// Name of the logo image in the asset catalog; `nil` falls back to the initials tile.
+    var logoAsset: String? = nil
 
     /// Only live websites have the Business Portal, so only they appear in the app.
     var isLive: Bool { status == .live }
@@ -59,12 +63,29 @@ struct Website: Identifiable, Hashable, Sendable {
     }
 }
 
+/// The tabs inside a website's business portal.
+enum PortalTab: Hashable, Sendable { case products, info, monitor }
+
 struct AppNotification: Identifiable, Hashable, Sendable {
     let id = UUID()
     var source: String
     var message: String
     var timeText: String
     var isUnread: Bool
+    /// Logo image of the website this notification is about (asset catalog name); `nil` → initials tile.
+    var logoAsset: String? = nil
+    /// Longer explanation shown on the notification's own page.
+    var detail: String = ""
+    /// Where "Open" should take the owner: a website and the tab inside its portal.
+    var websiteID: UUID? = nil
+    var tab: PortalTab? = nil
+    var actionTitle: String? = nil
+
+    /// Sent by WebBlock itself (billing, support, welcome) rather than by one of the owner's websites.
+    var isFromWebBlock: Bool { source.hasPrefix("WebBlock") }
+    var initials: String {
+        source.split(separator: " ").prefix(2).compactMap { $0.first(where: \.isLetter) }.map(String.init).joined().uppercased()
+    }
 }
 
 // MARK: - Business portal
@@ -76,6 +97,9 @@ struct Product: Identifiable, Hashable, Sendable {
     var description: String
     var price: Decimal
     var photoData: Data? = nil
+    /// Name of a bundled image in Assets.xcassets (e.g. "blue-lily-stem").
+    /// Used for the Figma product photos; shown in preference to `photoData`.
+    var imageName: String? = nil
 }
 
 struct OpeningDay: Identifiable, Hashable, Sendable {
@@ -141,6 +165,7 @@ struct MonitorSnapshot: Sendable {
     var lastSevenResults: [DeployResult]     // oldest to latest
     var resetsOn: String                     // "1 Nov"
     var productsUsed: Int
+    var photosUsed: Int
     var redeploysUsed: Int
     var websitesUsed: Int
     var succeededCount: Int
