@@ -11,8 +11,7 @@ struct SignInView: View {
             AuthBackground()
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.l) {
-                    Image("webblocks-logo").resizable().scaledToFit().frame(height: 56)
-                        .accessibilityLabel("WebBlocks")
+                    BrandLogo(height: 48)
 
                     (Text("Pick up right\nwhere you ").foregroundStyle(Color.wbText)
                      + Text("left off.").foregroundStyle(Color.wbBrand))
@@ -137,7 +136,21 @@ struct GoogleChooserSheet: View {
             .liquidBackdrop()
             .navigationTitle("Choose an account")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "chevron.left").font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Color(hex: 0x3F72D0))
+                            .frame(width: 44, height: 44)
+                            .liquidGlass(in: Circle(), tint: .white.opacity(0.6), interactive: true)
+                            .environment(\.colorScheme, .light)
+                            .overlay(Circle().stroke(Color(hex: 0x3F72D0).opacity(0.15), lineWidth: 1))
+                            .contentShape(Circle())
+                    }
+                    .accessibilityLabel("Cancel")
+                }
+                    .hidingSharedBackground()
+            }
         }
     }
 }

@@ -18,7 +18,7 @@ struct RootView: View {
                     .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: appState.isSignedIn)
-        .animation(.easeInOut(duration: 0.25), value: hasSeenOnboarding)
+        .animation(.easeInOut(duration: 0.15), value: appState.isSignedIn)
+        .animation(.easeInOut(duration: 0.15), value: hasSeenOnboarding)
     }
 }

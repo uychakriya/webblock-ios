@@ -52,7 +52,7 @@ private struct Entrance: ViewModifier {
         content
             .opacity(active ? 1 : 0)
             .offset(x: active ? 0 : x, y: active ? 0 : y)
-            .animation(.spring(response: 0.7, dampingFraction: 0.78).delay(active ? delay : 0), value: active)
+            .animation(.spring(response: 0.38, dampingFraction: 0.82).delay(active ? delay * 0.35 : 0), value: active)
     }
 }
 
@@ -111,9 +111,9 @@ private struct PhoneMockup: View {
                 .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
                 .padding(4.5)
         }
-        .frame(width: 118, height: 240)
+        .frame(width: 132, height: 268)
         .overlay(alignment: .top) {                                   // dynamic island
-            Capsule().fill(Color.black).frame(width: 34, height: 10).padding(.top, 9)
+            Capsule().fill(Color.black).frame(width: 38, height: 11).padding(.top, 10)
         }
         .overlay(alignment: .trailing) {                              // side button
             Capsule().fill(Color(hex: 0x6A7388)).frame(width: 2.5, height: 30).offset(x: 2, y: -28)
@@ -133,67 +133,44 @@ private struct PhoneMockup: View {
         VStack(spacing: 0) {
             // status bar
             HStack {
-                Text("9:41").font(.system(size: 6.5, weight: .semibold))
+                Text("9:41").font(.system(size: 8, weight: .semibold))
                 Spacer()
-                HStack(spacing: 2) {
-                    Image(systemName: "cellularbars").font(.system(size: 5.5))
-                    Image(systemName: "wifi").font(.system(size: 5.5))
-                    Image(systemName: "battery.100").font(.system(size: 7))
-                }
+                Image(systemName: "battery.100").font(.system(size: 9))
             }
             .foregroundStyle(Color(hex: 0x0E1421))
-            .padding(.horizontal, 11).frame(height: 24, alignment: .bottom)
+            .padding(.horizontal, 13).frame(height: 28, alignment: .bottom)
 
-            // site header: logo, Contact, menu
+            // site header
             HStack(spacing: 4) {
-                Text("✿ Petal & Stem").font(.system(size: 5, weight: .bold)).foregroundStyle(muted.opacity(0.7))
+                Text("✿ Petal & Stem").font(.system(size: 8, weight: .bold)).foregroundStyle(muted)
                 Spacer()
-                Capsule().fill(Color.wbBrand).frame(width: 24, height: 9)
-                    .overlay(Text("Contact").font(.system(size: 4.5, weight: .semibold)).foregroundStyle(.white))
-                VStack(spacing: 1.5) { ForEach(0..<3, id: \.self) { _ in Capsule().fill(muted.opacity(0.6)).frame(width: 7, height: 0.8) } }
+                VStack(spacing: 2) { ForEach(0..<3, id: \.self) { _ in Capsule().fill(muted.opacity(0.7)).frame(width: 10, height: 1.2) } }
             }
-            .padding(.horizontal, 8).padding(.top, 5).padding(.bottom, 5)
+            .padding(.horizontal, 10).padding(.vertical, 7)
 
-            // hero card
-            VStack(alignment: .leading, spacing: 3.5) {
-                Text("Fresh flowers for every moment.").font(.system(size: 8.6, weight: .heavy)).foregroundStyle(ink)
+            // hero card: one clear headline + one button
+            VStack(alignment: .leading, spacing: 7) {
+                Text("Fresh flowers for every moment.").font(.system(size: 13, weight: .heavy)).foregroundStyle(ink)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("Hand-tied bouquets, single stems and event flowers, arranged in our studio and delivered across town.")
-                    .font(.system(size: 4.2)).foregroundStyle(muted).lineSpacing(1.5)
-                    .fixedSize(horizontal: false, vertical: true)
-                Capsule().fill(Color(hex: 0x3A5FBE)).frame(height: 13)
-                    .overlay(Text("Shop flowers").font(.system(size: 5.5, weight: .semibold)).foregroundStyle(.white))
-                    .padding(.top, 2)
-                Capsule().fill(Color.white).frame(height: 13)
-                    .overlay(Capsule().stroke(Color(hex: 0xDDE3EE), lineWidth: 0.8))
-                    .overlay(Text("Visit the studio").font(.system(size: 5.5, weight: .semibold)).foregroundStyle(ink))
+                Capsule().fill(Color(hex: 0x3A5FBE)).frame(height: 20)
+                    .overlay(Text("Shop flowers").font(.system(size: 8.5, weight: .semibold)).foregroundStyle(.white))
             }
-            .padding(7)
+            .padding(9)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(LinearGradient(colors: [Color(hex: 0xF4F6FB), Color(hex: 0xE3E7F0)], startPoint: .top, endPoint: .bottom),
-                        in: UnevenRoundedRectangle(topLeadingRadius: 9, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 9))
-            .padding(.horizontal, 6)
+                        in: UnevenRoundedRectangle(topLeadingRadius: 10, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 10))
+            .padding(.horizontal, 7)
 
-            // photo
-            Color.clear.frame(height: 62).frame(maxWidth: .infinity)
+            // photo fills the rest of the screen
+            Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(Image("blue-lily-stem").resizable().scaledToFill())
-                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 9, bottomTrailingRadius: 9, topTrailingRadius: 0))
-                .padding(.horizontal, 6)
-
-            // next section, cut off by the bottom of the screen
-            Text("POPULAR THIS WEEK").font(.system(size: 3.5, weight: .medium)).foregroundStyle(muted)
-                .padding(.horizontal, 7).padding(.vertical, 3)
-                .overlay(Capsule().stroke(Color(hex: 0xDDE3EE), lineWidth: 0.6))
-                .padding(.top, 10)
-            Text("Fresh picks, hand-tied today").font(.system(size: 7, weight: .heavy)).foregroundStyle(ink)
-                .lineLimit(1).minimumScaleFactor(0.8).padding(.horizontal, 6)
-                .padding(.top, 5)
-            Spacer(minLength: 0)
+                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 10, bottomTrailingRadius: 10, topTrailingRadius: 0))
+                .padding(.horizontal, 7).padding(.bottom, 10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.white)
         .overlay(alignment: .bottom) {                                // home indicator
-            Capsule().fill(Color(hex: 0x0E1421)).frame(width: 36, height: 2.5).padding(.bottom, 4)
+            Capsule().fill(Color(hex: 0x0E1421)).frame(width: 40, height: 3).padding(.bottom, 3)
         }
     }
 }
@@ -216,8 +193,8 @@ private struct WebsiteIllustration: View {
                 HStack(spacing: 5) {
                     ForEach([Color.wbRed, .wbAmber, .wbGreen], id: \.self) { Circle().fill($0.opacity(0.85)).frame(width: 7, height: 7) }
                     HStack(spacing: 3) {
-                        Image(systemName: "lock.fill").font(.system(size: 7))
-                        Text("petalandstem.webblock.com").font(.system(size: 9, weight: .medium)).lineLimit(1)
+                        Image(systemName: "lock.fill").font(.system(size: 8))
+                        Text("petalandstem.webblock.com").font(.system(size: 10.5, weight: .medium)).lineLimit(1)
                     }
                     .foregroundStyle(.wbMuted)
                     .padding(.horizontal, 8).padding(.vertical, 4)
@@ -227,13 +204,13 @@ private struct WebsiteIllustration: View {
                 // hero: copy left, photo right
                 HStack(spacing: 8) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Fresh flowers\nfor every moment.").font(.system(size: 11, weight: .bold)).foregroundStyle(Color(hex: 0x1A273D))
-                        Capsule().fill(Color(hex: 0x1A273D)).frame(width: 44, height: 12)
-                            .overlay(Text("Shop flowers").font(.system(size: 6, weight: .semibold)).foregroundStyle(.white))
+                        Text("Fresh flowers\nfor every moment.").font(.system(size: 14, weight: .bold)).foregroundStyle(Color(hex: 0x1A273D))
+                        Capsule().fill(Color(hex: 0x1A273D)).frame(width: 62, height: 18)
+                            .overlay(Text("Shop flowers").font(.system(size: 8.5, weight: .semibold)).foregroundStyle(.white))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     Image("table-arrangement").resizable().scaledToFill()
-                        .frame(width: 96, height: 70).clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .frame(width: 100, height: 80).clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .padding(8)
                 .background(Color.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -242,27 +219,27 @@ private struct WebsiteIllustration: View {
                     ForEach(products.indices, id: \.self) { i in
                         VStack(alignment: .leading, spacing: 2) {
                             Image(products[i].0).resizable().scaledToFill()
-                                .frame(height: 50).frame(maxWidth: .infinity).clipped()
+                                .frame(height: 56).frame(maxWidth: .infinity).clipped()
                                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            Text(products[i].1).font(.system(size: 6, weight: .medium)).foregroundStyle(Color(hex: 0x1A273D)).lineLimit(1)
-                            Text(products[i].2).font(.system(size: 6, weight: .bold)).foregroundStyle(.wbBrand)
+                            Text(products[i].1).font(.system(size: 8.5, weight: .medium)).foregroundStyle(Color(hex: 0x1A273D)).lineLimit(1)
+                            Text(products[i].2).font(.system(size: 8.5, weight: .bold)).foregroundStyle(.wbBrand)
                         }
                         .entrance(active, delay: 0.35 + Double(i) * 0.1, y: 14)
                     }
                 }
             }
             .padding(12)
-            .frame(width: 268)
+            .frame(width: 292)
             .obGlass(cornerRadius: 22)
-            .rotationEffect(.degrees(-3))
-            .offset(x: -14, y: -8)
+            .rotationEffect(.degrees(-2))
+            .offset(x: -20, y: -26)
             .obFloat(6, duration: 3.2)
             .entrance(active, delay: 0.05)
 
             // Phone preview: a real phone shape showing the shop's mobile page, overlapping the browser
             PhoneMockup()
-                .rotationEffect(.degrees(4))
-                .offset(x: 104, y: 50)
+                .rotationEffect(.degrees(3))
+                .offset(x: 92, y: 62)
                 .obFloat(8, duration: 3.4, delay: 0.3)
                 .entrance(active, delay: 0.5, x: 40, y: 30)
 
@@ -274,7 +251,7 @@ private struct WebsiteIllustration: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .obGlass(cornerRadius: 16)
-            .offset(x: 96, y: -118)
+            .offset(x: 104, y: -134)
             .obFloat(6, duration: 2.6, delay: 0.3)
             .entrance(active, delay: 0.3, x: 30, y: -20)
 
@@ -283,7 +260,7 @@ private struct WebsiteIllustration: View {
                 .font(.system(size: 24, weight: .semibold)).foregroundStyle(.wbBrand)
                 .frame(width: 54, height: 54)
                 .obGlass(cornerRadius: 27)
-                .offset(x: -120, y: 122)
+                .offset(x: -124, y: 128)
                 .obFloat(9, duration: 3.6, delay: 0.5)
                 .entrance(active, delay: 0.45, x: -30, y: 20)
         }
@@ -306,9 +283,9 @@ private struct StepsIllustration: View {
     ]
 
     var body: some View {
-        VStack(spacing: 30) {
+        VStack(spacing: 22) {
             TemplateMarquee(running: active && !reduceMotion)
-                .frame(height: 74)
+                .frame(height: 107)
                 .entrance(active, delay: 0.05, y: -16)
 
             VStack(alignment: .leading, spacing: 0) {
@@ -360,49 +337,36 @@ private struct StepsIllustration: View {
     }
 }
 
-/// Endlessly scrolling row of template "looks", like the website's template carousel.
+/// Endlessly scrolling row of the website's real template thumbnails (same order as the landing carousel).
 private struct TemplateMarquee: View {
     let running: Bool
-    private struct Look { let title: String; let bg: Color; let fg: Color; let photo: String? }
-    private let looks: [Look] = [
-        Look(title: "Baked fresh,\nevery morning.", bg: Color(hex: 0xFBDCE6), fg: Color(hex: 0x8A2F4D), photo: nil),
-        Look(title: "Fresh flowers\nfor every moment.", bg: Color(hex: 0xF4EEE6), fg: Color(hex: 0x1A273D), photo: "table-arrangement"),
-        Look(title: "Roasted this week,\nbrewed for you.", bg: Color(hex: 0x2B1D16), fg: Color(hex: 0xF3E3CF), photo: nil),
-        Look(title: "Sound you\ncan feel.", bg: Color(hex: 0xECEEF2), fg: Color(hex: 0x1A273D), photo: "stone-vase"),
-    ]
-    private let cardW: CGFloat = 112, gap: CGFloat = 10
+    private let names = ["petal-stem", "sugar-crumb", "kiln-coffee", "northpoint-audio",
+                         "stitch-and-shell", "keycap-lab", "cold-brew-co", "plates"]
+    private let cardW: CGFloat = 148, gap: CGFloat = 12
+    private var cardH: CGFloat { cardW * 1584 / 2560 }     // thumbnails are 2560×1584
 
     var body: some View {
         TimelineView(.animation(paused: !running)) { ctx in
-            let loop = (cardW + gap) * CGFloat(looks.count)
-            let x = running ? -CGFloat((ctx.date.timeIntervalSinceReferenceDate * 22).truncatingRemainder(dividingBy: Double(loop))) : 0
+            let loop = (cardW + gap) * CGFloat(names.count)
+            let x = running ? -CGFloat((ctx.date.timeIntervalSinceReferenceDate * 24).truncatingRemainder(dividingBy: Double(loop))) : 0
             HStack(spacing: gap) {
-                ForEach(0..<(looks.count * 2), id: \.self) { i in card(looks[i % looks.count]) }
+                ForEach(0..<(names.count * 2), id: \.self) { i in
+                    Image("tpl-" + names[i % names.count]).resizable().scaledToFill()
+                        .frame(width: cardW, height: cardH)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.black.opacity(0.08), lineWidth: 1))
+                        .shadow(color: .black.opacity(0.10), radius: 6, y: 3)
+                }
             }
             .fixedSize()
             .offset(x: x)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(width: 330)
+        .frame(width: 340, height: cardH + 14)
         .clipped()
         .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.1),
                                       .init(color: .black, location: 0.9), .init(color: .clear, location: 1)],
                              startPoint: .leading, endPoint: .trailing))
-    }
-
-    private func card(_ look: Look) -> some View {
-        HStack(spacing: 6) {
-            Text(look.title).font(.system(size: 8, weight: .bold)).foregroundStyle(look.fg)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if let photo = look.photo {
-                Image(photo).resizable().scaledToFill().frame(width: 38, height: 54)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            }
-        }
-        .padding(8)
-        .frame(width: cardW, height: 66)
-        .background(look.bg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .shadow(color: .black.opacity(0.10), radius: 6, y: 3)
     }
 }
 
@@ -559,6 +523,10 @@ private struct MonitorIllustration: View {
 struct OnboardingView: View {
     let finish: () -> Void
     @State private var page = 0
+    @State private var showSplash = true      // centered logo first, then it glides to the corner
+    @State private var logoIn = false
+    @Namespace private var logoSpace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private struct Page: Identifiable {
         let id: Int
@@ -587,8 +555,13 @@ struct OnboardingView: View {
 
             VStack(spacing: 0) {
                 HStack {
-                    Image("webblocks-logo").resizable().scaledToFit().frame(height: 48)
-                        .accessibilityLabel("WebBlocks")
+                    if showSplash {
+                        Color.clear.frame(width: 48, height: 48)
+                    } else {
+                        BrandLogo(height: 38)
+                            .matchedGeometryEffect(id: "logo", in: logoSpace)
+                            .accessibilityLabel("WebBlocks")
+                    }
                     Spacer()
                     Button("Skip", action: finish)
                         .font(.subheadline.weight(.semibold)).foregroundStyle(.wbMuted)
@@ -596,6 +569,7 @@ struct OnboardingView: View {
                         .accessibilityHidden(isLast)
                 }
                 .frame(height: 48).padding(.horizontal, Space.screen)
+                .opacity(showSplash ? 0 : 1)
 
                 GeometryReader { geo in
                 // The illustrations are drawn in a 340pt-tall design box; shrink them on short phones
@@ -623,7 +597,7 @@ struct OnboardingView: View {
                             .padding(.horizontal, Space.l)
                             .opacity(page == item.id ? 1 : 0)
                             .offset(y: page == item.id ? 0 : 14)
-                            .animation(.easeOut(duration: 0.45), value: page)
+                            .animation(.easeOut(duration: 0.2), value: page)
                             Spacer(minLength: 0)
                         }
                         .tag(item.id)
@@ -643,7 +617,7 @@ struct OnboardingView: View {
                 .accessibilityHidden(true)
 
                 Button(isLast ? "Get started" : "Next") {
-                    if isLast { finish() } else { withAnimation(.easeInOut(duration: 0.4)) { page += 1 } }
+                    if isLast { finish() } else { withAnimation(.easeInOut(duration: 0.25)) { page += 1 } }
                 }
                 .buttonStyle(.wbPrimary)
                 .disabled(false)                      // never inherit a disabled state from a parent
@@ -651,12 +625,30 @@ struct OnboardingView: View {
                 .padding(.horizontal, Space.screen).padding(.bottom, Space.m)
                 .zIndex(1)                            // keep the button above the paging view
             }
+            .opacity(showSplash ? 0 : 1)
+            .allowsHitTesting(!showSplash)
+
+            // Splash: big logo springs in at the centre, holds, then flies to the top-left corner.
+            if showSplash {
+                BrandLogo(height: 84)
+                    .matchedGeometryEffect(id: "logo", in: logoSpace)
+                    .scaleEffect(logoIn ? 1 : 0.6)
+                    .opacity(logoIn ? 1 : 0)
+                    .accessibilityLabel("WebBlocks")
+            }
+        }
+        .task {
+            if reduceMotion { logoIn = true } else {
+                withAnimation(.spring(response: 0.7, dampingFraction: 0.7)) { logoIn = true }
+            }
+            try? await Task.sleep(for: .seconds(reduceMotion ? 0.6 : 1.5))
+            withAnimation(.spring(response: 0.7, dampingFraction: 0.85)) { showSplash = false }
         }
     }
 
     @ViewBuilder
     private func illustration(for id: Int) -> some View {
-        let active = page == id
+        let active = page == id && !showSplash
         switch id {
         case 0: WebsiteIllustration(active: active)
         case 1: StepsIllustration(active: active)

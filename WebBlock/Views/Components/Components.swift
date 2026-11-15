@@ -86,7 +86,7 @@ struct AppearModifier: ViewModifier {
             .offset(y: shown ? 0 : 18)
             .scaleEffect(shown ? 1 : 0.96)
             .onAppear {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.8).delay(Double(min(index, 8)) * 0.06)) {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85).delay(Double(min(index, 8)) * 0.03)) {
                     shown = true
                 }
             }
@@ -100,13 +100,14 @@ extension View {
 // MARK: - Buttons (pill-shaped, like the Figma "Sign in" and "Add product" buttons)
 
 struct PrimaryButtonStyle: ButtonStyle {
+    var height: CGFloat = 38
     @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.body.weight(.semibold))
             .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, minHeight: 50)
-            .liquidGlass(in: Capsule(), tint: Color(hex: 0x3F72D0), interactive: true)
+            .frame(maxWidth: .infinity, minHeight: height)
+            .brandFace(in: Capsule())
             .opacity(isEnabled ? (configuration.isPressed ? 0.9 : 1) : 0.45)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
@@ -117,15 +118,19 @@ struct PrimaryButtonStyle: ButtonStyle {
 
 struct SecondaryButtonStyle: ButtonStyle {
     var destructive = false
+    var height: CGFloat = 38
     @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.body.weight(.semibold))
-            .foregroundStyle(destructive ? Color.wbRed : Color.wbText)
-            .frame(maxWidth: .infinity, minHeight: 50)
-            // Destructive buttons share Cancel's look (same glass and thin outline); only the text is red.
-            .liquidGlass(in: Capsule(), interactive: true)
-            .overlay(Capsule().strokeBorder(Color.wbBrand.opacity(0.18), lineWidth: 1))
+            .foregroundStyle(destructive ? Color.wbRed : Color(hex: 0x3862B6))
+            .frame(maxWidth: .infinity, minHeight: height)
+            // White glass: bright fill, light rim, soft shadow. Destructive shares Cancel's look; only the text is red.
+            .background(Color.white, in: Capsule())
+            .overlay(Capsule().strokeBorder(
+                LinearGradient(colors: [.white, Color(hex: 0x3F72D0).opacity(0.16), .white],
+                               startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.2))
+            .shadow(color: Color(hex: 0x1F3C7A).opacity(0.10), radius: 8, y: 3)
             .opacity(isEnabled ? 1 : 0.5)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
@@ -133,12 +138,37 @@ struct SecondaryButtonStyle: ButtonStyle {
     }
 }
 
+/// Small white glass pill for text buttons in a toolbar (Cancel, Done…), instead of the grey system capsule.
+struct GlassBarButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.dm(15, 600))
+            .foregroundStyle(Color(hex: 0x3862B6))
+            .padding(.horizontal, 16).padding(.vertical, 8)
+            .background(Color.white, in: Capsule())
+            .overlay(Capsule().strokeBorder(
+                LinearGradient(colors: [.white, Color(hex: 0x3F72D0).opacity(0.16), .white],
+                               startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.2))
+            .shadow(color: Color(hex: 0x1F3C7A).opacity(0.10), radius: 6, y: 2)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+
+extension ButtonStyle where Self == GlassBarButtonStyle {
+    static var wbGlassBar: GlassBarButtonStyle { .init() }
+}
+
 extension ButtonStyle where Self == PrimaryButtonStyle {
     static var wbPrimary: PrimaryButtonStyle { .init() }
+    /// Same 50 pt height as the text fields, for buttons that sit under a form.
+    static var wbPrimaryField: PrimaryButtonStyle { .init(height: 50) }
 }
 extension ButtonStyle where Self == SecondaryButtonStyle {
     static var wbSecondary: SecondaryButtonStyle { .init() }
     static var wbDestructive: SecondaryButtonStyle { .init(destructive: true) }
+    static var wbSecondaryField: SecondaryButtonStyle { .init(height: 50) }
+    static var wbDestructiveField: SecondaryButtonStyle { .init(destructive: true, height: 50) }
 }
 
 /// Primary button that swaps its label for a spinner while work is running.
@@ -154,7 +184,7 @@ struct LoadingButton: View {
             }
             .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isLoading)
         }
-        .buttonStyle(.wbPrimary)
+        .buttonStyle(.wbPrimaryField)
         .allowsHitTesting(!isLoading)        // ignore taps while working, but stay solid blue
     }
 }
@@ -287,7 +317,7 @@ struct FilterChip: View {
             .foregroundStyle(isSelected ? Color.white : Color.wbText)
             .padding(.horizontal, 18).frame(minHeight: 44)
             // Hand-drawn glass (not system glass): system glass inside a clipped, scrolling row draws a grey box.
-            .glassFace(in: Capsule(), tint: isSelected ? Color(hex: 0x3F72D0) : nil, glow: false)   // flat: no shadow
+            .modifier(ChipFace(isSelected: isSelected))
             .overlay { if !isSelected { Capsule().stroke(Color.wbBrand.opacity(0.3), lineWidth: 1) } }
             .scaleEffect(isSelected ? 1.04 : 1)
             .animation(.spring(response: 0.35, dampingFraction: 0.65), value: isSelected)
@@ -693,118 +723,96 @@ struct OpeningHoursList: View {
     }
 }
 
-// MARK: - Glass dock (floating tab bar whose notch follows the selected tab)
+// MARK: - Glass dock (floating Liquid Glass tab bar with a sliding, draggable selection pill)
 
-/// A pill with a round cutout in its top edge at `notchCenter`, so a circular button sits snugly inside it.
-struct DockShape: Shape {
-    var notchCenter: CGFloat
-    var notchRadius: CGFloat = 35      // the cutout is a circle centred on the bar's top edge
-    var fillet: CGFloat = 12           // softens where the cutout meets the top edge
-
-    var animatableData: CGFloat {
-        get { notchCenter }
-        set { notchCenter = newValue }
-    }
-
-    func path(in rect: CGRect) -> Path {
-        let h = rect.height, r = h / 2, R = notchRadius, f = fillet
-        let cx = min(max(notchCenter, rect.minX + r + R + f), rect.maxX - r - R - f)
-        let cy = rect.minY
-        // where the fillet curves land on the circle (20° below horizontal on each side)
-        let theta = 20.0 * .pi / 180
-        let left = CGPoint(x: cx - R * cos(theta), y: cy + R * sin(theta))
-
-        var p = Path()
-        p.move(to: CGPoint(x: rect.minX + r, y: rect.minY))
-        p.addLine(to: CGPoint(x: cx - R - f, y: rect.minY))
-        p.addQuadCurve(to: left, control: CGPoint(x: cx - R, y: rect.minY))
-        p.addArc(center: CGPoint(x: cx, y: cy), radius: R,
-                 startAngle: .degrees(180 - 20), endAngle: .degrees(20), clockwise: true)
-        p.addQuadCurve(to: CGPoint(x: cx + R + f, y: rect.minY), control: CGPoint(x: cx + R, y: rect.minY))
-        p.addLine(to: CGPoint(x: rect.maxX - r, y: rect.minY))
-        p.addArc(center: CGPoint(x: rect.maxX - r, y: rect.midY), radius: r,
-                 startAngle: .degrees(-90), endAngle: .degrees(90), clockwise: false)
-        p.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
-        p.addArc(center: CGPoint(x: rect.minX + r, y: rect.midY), radius: r,
-                 startAngle: .degrees(90), endAngle: .degrees(270), clockwise: false)
-        p.closeSubpath()
-        return p
-    }
-}
-
-/// Liquid Glass dock with the three portal tabs. The selected tab rises into a round button in the notch.
+/// Compact floating capsule with the three portal tabs. A glass pill glides under the selected tab and can be
+/// dragged along the bar: the pill follows the finger, lifts slightly, and the page switches as it crosses each tab.
 struct GlassDock: View {
     @Binding var selection: PortalTab
 
     private struct Item { let tab: PortalTab; let title: String; let symbol: String }
     private let items = [
         Item(tab: .products, title: "Products", symbol: "shippingbox"),
-        Item(tab: .info, title: "Business", symbol: "storefront"),
-        Item(tab: .monitor, title: "Monitor", symbol: "waveform.path.ecg"),
+        Item(tab: .info, title: "Business info", symbol: "storefront"),
+        Item(tab: .monitor, title: "Monitoring", symbol: "chart.line.uptrend.xyaxis"),
     ]
     private let barHeight: CGFloat = 64
-    private let lift: CGFloat = 28          // how far the round button rises above the bar
-    private let sideInset: CGFloat = 30     // keeps the notch clear of the rounded ends
+    private let inset: CGFloat = 5
+
+    /// Finger position along the bar while dragging (nil when idle) so the pill can follow it freely.
+    @State private var dragCenter: CGFloat?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var index: Int { items.firstIndex { $0.tab == selection } ?? 0 }
 
     var body: some View {
         GeometryReader { geo in
-            let width = geo.size.width
-            let tabWidth = (width - sideInset * 2) / CGFloat(items.count)
-            let notchX = sideInset + tabWidth * (CGFloat(index) + 0.5)
+            let tabWidth = (geo.size.width - inset * 2) / CGFloat(items.count)
+            let restX = inset + tabWidth * (CGFloat(index) + 0.5)
+            let pillX = dragCenter.map { min(max($0, inset + tabWidth / 2), geo.size.width - inset - tabWidth / 2) } ?? restX
+            let lifted = dragCenter != nil
 
-            ZStack(alignment: .topLeading) {
-                // bar
+            ZStack(alignment: .leading) {
+                // sliding glass selection pill
+                Capsule()
+                    .fill(Color.wbBrand.opacity(0.10))
+                    .overlay(Capsule().fill(.white.opacity(0.35)))
+                    .overlay(Capsule().strokeBorder(
+                        LinearGradient(colors: [.white.opacity(0.95), .white.opacity(0.25), .white.opacity(0.7)],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1))
+                    .shadow(color: Color.wbBrand.opacity(lifted ? 0.28 : 0.12), radius: lifted ? 10 : 4, y: lifted ? 5 : 2)
+                    .frame(width: tabWidth, height: barHeight - inset * 2)
+                    .scaleEffect(lifted ? 1.1 : 1)
+                    .position(x: pillX, y: barHeight / 2)
+
+                // tabs
                 HStack(spacing: 0) {
-                    ForEach(items.indices, id: \.self) { i in tab(items[i], selected: i == index) }
+                    ForEach(items.indices, id: \.self) { i in
+                        let on = i == index
+                        VStack(spacing: 3) {
+                            Image(systemName: items[i].symbol).font(.system(size: 20, weight: .medium)).frame(height: 24)
+                            Text(items[i].title).font(.system(size: 10.5, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.8)
+                        }
+                        .foregroundStyle(on ? Color.wbBrand : Color.wbText.opacity(0.85))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(items[i].title)
+                        .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+                        .accessibilityAction { selection = items[i].tab }
+                    }
                 }
-                .padding(.horizontal, sideInset)
-                .frame(width: width, height: barHeight)
-                .liquidGlass(in: DockShape(notchCenter: notchX))
-                .overlay(
-                    DockShape(notchCenter: notchX).stroke(
-                        LinearGradient(colors: [.white.opacity(0.95), .white.opacity(0.25), .white.opacity(0.8)],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.2))
-                .overlay(DockShape(notchCenter: notchX).stroke(Color.wbBrand.opacity(0.12), lineWidth: 1))
-                .shadow(color: Color.wbBrand.opacity(0.10), radius: 10, y: 4)
-                .offset(y: lift)
-
-                // floating round button showing the selected tab
-                Image(systemName: items[index].symbol)
-                    .font(.system(size: 21, weight: .semibold)).foregroundStyle(.white)
-                    .id(items[index].symbol)
-                    .transition(.scale(scale: 0.5).combined(with: .opacity))
-                    .frame(width: 54, height: 54)
-                    .liquidGlass(in: Circle(), tint: Color(hex: 0x3F72D0), interactive: true)
-                    .overlay(Circle().stroke(.white, lineWidth: 2.5))
-                    .shadow(color: Color.wbBrand.opacity(0.28), radius: 6, y: 3)
-                    .position(x: notchX, y: lift)
-                    .allowsHitTesting(false)
+                .padding(.horizontal, inset)
             }
-            .animation(.spring(response: 0.45, dampingFraction: 0.78), value: selection)
+            .frame(width: geo.size.width, height: barHeight)
+            .liquidGlass(in: Capsule(), glow: false)
+            .overlay(Capsule().strokeBorder(
+                LinearGradient(colors: [.white.opacity(0.95), .white.opacity(0.25), .white.opacity(0.8)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.2))
+            .overlay(Capsule().stroke(Color.wbBrand.opacity(0.10), lineWidth: 1))
+            .shadow(color: Color(hex: 0x1F3C7A).opacity(0.14), radius: 14, y: 6)
+            .contentShape(Capsule())
+            // One gesture handles both tap and drag: whichever tab is under the finger becomes selected.
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        withAnimation(reduceMotion ? nil : .interactiveSpring(response: 0.1, dampingFraction: 0.9)) {
+                            dragCenter = value.location.x
+                        }
+                        let i = min(max(Int((value.location.x - inset) / tabWidth), 0), items.count - 1)
+                        if items[i].tab != selection {
+                            withAnimation(.easeOut(duration: 0.1)) { selection = items[i].tab }
+                        }
+                    }
+                    .onEnded { _ in
+                        withAnimation(reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.8)) { dragCenter = nil }
+                    }
+            )
+            .animation(reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 0.8), value: selection)
         }
-        .frame(height: barHeight + lift)
-        .padding(.horizontal, Space.m)
-        .padding(.bottom, -20)             // drops the dock into the home-indicator gap, closer to the screen edge
+        .frame(height: barHeight)
+        .padding(.horizontal, 28)
+        .padding(.bottom, -12)             // sits low, close to the home indicator
         .sensoryFeedback(.selection, trigger: selection)
-    }
-
-    private func tab(_ item: Item, selected: Bool) -> some View {
-        Button { selection = item.tab } label: {
-            VStack(spacing: 3) {
-                Image(systemName: item.symbol).font(.system(size: 20, weight: .medium))
-                    .frame(height: 24)
-                    .opacity(selected ? 0 : 1)             // the selected icon lives in the round button
-                Text(item.title).font(.system(size: 10, weight: .semibold)).lineLimit(1)
-            }
-            .foregroundStyle(selected ? Color.wbBrand : Color.wbText)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(item.title)
-        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -817,27 +825,33 @@ struct WBSegmented<Value: Hashable>: View {
     @Namespace private var pill
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 0) {
             ForEach(options.indices, id: \.self) { i in
                 let on = options[i].value == selection
                 Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { selection = options[i].value }
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { selection = options[i].value }
                 } label: {
                     Text(options[i].label)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(on ? Color.white : Color.wbText)
-                        .frame(maxWidth: .infinity, minHeight: 38)
+                        .font(.dm(16, on ? 700 : 500))
+                        .foregroundStyle(on ? Color(hex: 0x3862B6) : Color(hex: 0x5F6B85))
+                        .frame(maxWidth: .infinity, minHeight: 42)
                         .background {
-                            if on { Capsule().fill(.clear).glassFace(in: Capsule(), tint: Color(hex: 0x3F72D0)).matchedGeometryEffect(id: "pill", in: pill) }
+                            // the selected segment is a white pill that slides between the options
+                            if on {
+                                Capsule().fill(Color.white)
+                                    .shadow(color: Color(hex: 0x1F3C7A).opacity(0.10), radius: 8, y: 3)
+                                    .matchedGeometryEffect(id: "pill", in: pill)
+                            }
                         }
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(on ? .isSelected : [])
+                .sensoryFeedback(.selection, trigger: on)
             }
         }
         .padding(4)
-        .background(Color.wbBrandSoft, in: Capsule())
+        .background(Color(hex: 0xE6EFFC), in: Capsule())
     }
 }
 
@@ -880,6 +894,46 @@ struct WBPrompt: View {
     }
 }
 
+/// Centred confirmation dialog (dimmed page behind it) for destructive actions such as deleting a product.
+struct WBConfirm: View {
+    let title: String
+    let message: String
+    let confirmTitle: String
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.35).ignoresSafeArea().onTapGesture(perform: onCancel)
+            VStack(spacing: Space.s) {
+                Text(title).font(.dm(19, 700)).foregroundStyle(Color(hex: 0x1F2A4D))
+                    .multilineTextAlignment(.center)
+                Text(message).font(.dm(15, 400)).foregroundStyle(Color(hex: 0x5F6B85))
+                    .multilineTextAlignment(.center).lineSpacing(3)
+                HStack(spacing: Space.s) {
+                    Button("Cancel", action: onCancel).buttonStyle(.wbSecondaryField)
+                    Button(action: onConfirm) {
+                        Text(confirmTitle).font(.body.weight(.semibold)).foregroundStyle(.white)
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                            .background(Color.wbRed, in: Capsule())
+                            .shadow(color: Color.wbRed.opacity(0.3), radius: 8, y: 3)
+                    }
+                    .buttonStyle(.wbCardPress)
+                }
+                .padding(.top, Space.xs)
+            }
+            .padding(Space.l)
+            .frame(maxWidth: 340)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .shadow(color: .black.opacity(0.18), radius: 24, y: 10)
+            .padding(.horizontal, Space.screen)
+        }
+        .transition(.opacity)
+        .accessibilityAddTraits(.isModal)
+    }
+}
+
 
 // MARK: - Keyboard visibility
 
@@ -898,7 +952,6 @@ final class KeyboardWatcher {
     }
 }
 
-
 /// The same switch as `WBSegmented`, with an icon in each segment (grid / list).
 struct WBIconSegmented<Value: Hashable>: View {
     let options: [(symbol: String, label: String, value: Value)]
@@ -913,11 +966,16 @@ struct WBIconSegmented<Value: Hashable>: View {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { selection = options[i].value }
                 } label: {
                     Image(systemName: options[i].symbol)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(on ? Color.white : Color.wbText)
-                        .frame(width: 44, height: 30)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(on ? Color.wbText : Color.wbMuted)
+                        .frame(width: 54, height: 42)
                         .background {
-                            if on { Capsule().fill(.clear).glassFace(in: Capsule(), tint: Color(hex: 0x3F72D0)).matchedGeometryEffect(id: "pill", in: pill) }
+                            // the selected segment is a white glass pill that slides between the two
+                            if on {
+                                Capsule().fill(Color.white)
+                                    .shadow(color: Color(hex: 0x1F3C7A).opacity(0.12), radius: 5, y: 2)
+                                    .matchedGeometryEffect(id: "pill", in: pill)
+                            }
                         }
                         .contentShape(Capsule())
                 }
@@ -926,8 +984,8 @@ struct WBIconSegmented<Value: Hashable>: View {
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
-        .padding(3)
-        .background(Color.wbBrandSoft, in: Capsule())
+        .padding(4)
+        .background(Color(hex: 0xE6EFFC), in: Capsule())
     }
 }
 
@@ -950,9 +1008,9 @@ struct WBEmptyState: View {
                 Circle().fill(Color.wbBrandSoft.opacity(0.45)).frame(width: 150, height: 150)
                 Circle().fill(Color.wbBrandSoft).frame(width: 112, height: 112)
                 Circle()
-                    .fill(LinearGradient(colors: [Color(hex: 0x6C9BEA), Color(hex: 0x3F72D0)], startPoint: .top, endPoint: .bottom))
+                    .fill(LinearGradient(colors: [Color(hex: 0x6C9BEA), .wbBrand], startPoint: .top, endPoint: .bottom))
                     .frame(width: 76, height: 76)
-                    .shadow(color: Color(hex: 0x3F72D0).opacity(0.35), radius: 12, y: 6)
+                    .shadow(color: .wbBrand.opacity(0.35), radius: 12, y: 6)
                 Image(systemName: symbol).font(.system(size: 30, weight: .semibold)).foregroundStyle(.white)
                 // little sparkles around the circles
                 Image(systemName: "sparkle").font(.system(size: 14, weight: .bold)).foregroundStyle(Color(hex: 0x8B5CF6))
@@ -982,5 +1040,36 @@ struct WBEmptyState: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
+    }
+}
+
+
+/// Filter chip surface: solid website blue when selected, plain card otherwise.
+private struct ChipFace: ViewModifier {
+    let isSelected: Bool
+    func body(content: Content) -> some View {
+        if isSelected { content.brandFace(in: Capsule(), glow: false) }
+        else { content.glassFace(in: Capsule(), tint: nil, glow: false) }
+    }
+}
+
+// MARK: - Brand logo (vector, so it stays sharp at any size and screen scale)
+
+/// The WebBlocks logo: the vector mark from the website with the wordmark set to its right.
+/// Drawn from an SVG and live text instead of a bitmap, so it never blurs at any size or screen scale.
+struct BrandLogo: View {
+    /// Height of the mark; the wordmark scales with it.
+    var height: CGFloat = 48
+
+    var body: some View {
+        HStack(spacing: height * 0.2) {
+            Image("webblocks-mark").resizable().interpolation(.high).scaledToFit()
+                .frame(height: height)
+            (Text("Web").foregroundStyle(Color(hex: 0x151A2C)) + Text("Blocks").foregroundStyle(Color(hex: 0x5B5BF6)))
+                .font(.system(size: height * 0.46, weight: .bold, design: .rounded))
+                .lineLimit(1).fixedSize()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("WebBlocks")
     }
 }

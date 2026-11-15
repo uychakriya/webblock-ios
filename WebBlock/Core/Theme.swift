@@ -126,6 +126,17 @@ extension View {
         }
     }
 
+    /// Solid website-blue button surface. Drawn by hand, so it looks identical on every iOS version
+    /// (no translucent system glass that washes the blue out into a soft tint).
+    func brandFace<S: Shape>(in shape: S, glow: Bool = true) -> some View {
+        self
+            .background(Color.wbBrand, in: shape)
+            .overlay(shape.stroke(
+                LinearGradient(colors: [.white.opacity(0.55), .white.opacity(0.08), .white.opacity(0.3)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1))
+            .shadow(color: Color.wbBrand.opacity(glow ? 0.3 : 0), radius: 8, y: 3)
+    }
+
     /// The glass-button look drawn by hand (lit gradient, bright rim, soft glow) with no live system effect.
     /// Used for chips, segment pills and small buttons inside scrolling rows, where system glass can draw a
     /// grey box behind them or slow scrolling. Looks the same on every iOS version.
@@ -151,26 +162,11 @@ extension View {
     func liquidBackdrop(panelHeight: CGFloat? = nil) -> some View { background { LiquidBackdrop(panelHeight: panelHeight) } }
 }
 
-/// White page (navy in dark mode). Pass `panelHeight` (a fraction of the screen) to add a flat light-blue
+/// The app-wide page background (now the pale tiled blue, see `TileBackdrop`). Formerly: white page. Pass `panelHeight` (a fraction of the screen) to add a flat light-blue
 /// panel with rounded bottom corners across the top, as on the websites list. No gradient and no live blur.
 struct LiquidBackdrop: View {
-    var panelHeight: CGFloat? = nil
-    @Environment(\.colorScheme) private var scheme
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .top) {
-                (scheme == .dark ? Color(hex: 0x0B1220) : Color.white)
-                if let panelHeight {
-                    UnevenRoundedRectangle(bottomLeadingRadius: 36, bottomTrailingRadius: 36, style: .continuous)
-                        .fill(scheme == .dark ? Color(hex: 0x1A2B52) : Color(hex: 0xDCE7FA))
-                        .frame(height: geo.size.height * panelHeight)
-                }
-            }
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
+    var panelHeight: CGFloat? = nil          // kept for existing call sites; every screen now uses the tiled page
+    var body: some View { TileBackdrop() }
 }
 
 /// Header for the websites page, in the logo's colours: its blue squares blending into its purple square
@@ -282,4 +278,125 @@ struct ConcentricRings: View {
             }
         }
     }
+}
+
+
+// MARK: - Tiled page background + soft glass cards (Products style)
+
+/// Pale blue page made of soft square tiles that fades to white by mid-screen.
+struct TileBackdrop: View {
+    @Environment(\.colorScheme) private var scheme
+    private let tile: CGFloat = 42
+
+    var body: some View {
+        let page = scheme == .dark ? Color(hex: 0x0B1220) : Color.white
+        ZStack(alignment: .top) {
+            page
+            GeometryReader { geo in
+                ZStack(alignment: .top) {
+                    LinearGradient(colors: scheme == .dark ? [Color(hex: 0x1A2B52), Color(hex: 0x0B1220)]
+                                                          : [Color(hex: 0xEDF3FD), Color(hex: 0xF1F6FD), Color(hex: 0xFAFCFF)],
+                                   startPoint: .top, endPoint: .bottom)
+                    Canvas { ctx, size in
+                        let cols = Int(size.width / tile) + 2, rows = Int(size.height / tile) + 2
+                        for r in 0..<rows {
+                            for c in 0..<cols {
+                                // mostly flat pale blue; a handful of squares a shade deeper or lighter, scattered
+                                var h = UInt32(truncatingIfNeeded: r &* 73856093 ^ c &* 19349663)
+                                h = (h ^ (h >> 13)) &* 1274126177
+                                let v = Int((h ^ (h >> 16)) % 100)
+                                let fill: (Color, Double)
+                                switch v {
+                                case 0..<9:   fill = (Color(hex: 0xC9DAF6), 0.30)      // deeper
+                                case 9..<20:  fill = (Color(hex: 0xD3E2F8), 0.24)      // slightly deeper
+                                case 20..<30: fill = (.white, 0.30)                    // lighter
+                                default: continue
+                                }
+                                ctx.fill(Path(CGRect(x: CGFloat(c) * tile, y: CGFloat(r) * tile, width: tile, height: tile)),
+                                         with: .color(fill.0.opacity(scheme == .dark ? fill.1 * 0.22 : fill.1)))
+                            }
+                        }
+                        var grid = Path()
+                        for c in 0...cols { grid.move(to: CGPoint(x: CGFloat(c) * tile, y: 0)); grid.addLine(to: CGPoint(x: CGFloat(c) * tile, y: size.height)) }
+                        for r in 0...rows { grid.move(to: CGPoint(x: 0, y: CGFloat(r) * tile)); grid.addLine(to: CGPoint(x: size.width, y: CGFloat(r) * tile)) }
+                        ctx.stroke(grid, with: .color(Color(hex: 0xC6D8F5).opacity(scheme == .dark ? 0.08 : 0.24)), lineWidth: 1)
+                    }
+                }
+                .frame(height: geo.size.height * 0.62)
+                .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.35),
+                                              .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom))
+            }
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct SoftGlass: ViewModifier {
+    let cornerRadius: CGFloat
+    @Environment(\.colorScheme) private var scheme
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        content
+            .background(.ultraThinMaterial, in: shape)
+            .background(scheme == .dark ? Color.white.opacity(0.06) : Color.white.opacity(0.66), in: shape)
+            .overlay(shape.strokeBorder(
+                LinearGradient(colors: [.white.opacity(0.95), .white.opacity(0.35), .white.opacity(0.85)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.2))
+            .overlay(shape.stroke(Color(hex: 0x3F72D0).opacity(0.10), lineWidth: 1))
+            .shadow(color: Color(hex: 0x1F3C7A).opacity(0.08), radius: 12, y: 5)
+    }
+}
+
+extension View {
+    /// Frosted white glass card: blurred material, bright rim, soft blue shadow. Drawn by hand so it stays
+    /// smooth inside scrolling lists.
+    func softGlass(cornerRadius: CGFloat = 24) -> some View { modifier(SoftGlass(cornerRadius: cornerRadius)) }
+}
+
+
+// MARK: - DM Sans (the website's body font)
+
+enum DMSans {
+    /// Registers the bundled variable font once at launch. Falls back to the system font if it can't load.
+    static func register() {
+        guard let url = Bundle.main.url(forResource: "DMSans", withExtension: "ttf") else { return }
+        CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+    }
+    static var isAvailable: Bool { UIFont.familyNames.contains("DM Sans") }
+}
+
+extension Font {
+    /// DM Sans at an exact size and weight (100–1000, 400 regular, 500 medium, 600 semibold, 700 bold).
+    static func dm(_ size: CGFloat, _ weight: CGFloat = 400) -> Font {
+        guard DMSans.isAvailable else {
+            let w: Font.Weight = weight >= 700 ? .bold : weight >= 600 ? .semibold : weight >= 500 ? .medium : .regular
+            return .system(size: size, weight: w)
+        }
+        let wght = NSNumber(value: 0x77676874)                    // the 'wght' variation axis
+        let desc = UIFontDescriptor(fontAttributes: [
+            .family: "DM Sans",
+            UIFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String): [wght: NSNumber(value: Double(weight))],
+        ])
+        return Font(UIFont(descriptor: desc, size: size))
+    }
+}
+
+
+private struct WhiteCard: ViewModifier {
+    let cornerRadius: CGFloat
+    @Environment(\.colorScheme) private var scheme
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        content
+            .background(scheme == .dark ? Color(hex: 0x142038) : Color.white, in: shape)
+            .overlay(shape.stroke(Color(hex: 0x3F72D0).opacity(0.10), lineWidth: 1))
+            .shadow(color: Color(hex: 0x1F3C7A).opacity(0.07), radius: 10, y: 4)
+    }
+}
+
+extension View {
+    /// Solid white card with a hairline border and a soft shadow.
+    func whiteCard(cornerRadius: CGFloat = 24) -> some View { modifier(WhiteCard(cornerRadius: cornerRadius)) }
 }

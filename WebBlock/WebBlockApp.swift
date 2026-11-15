@@ -5,6 +5,7 @@ struct WebBlockApp: App {
     @State private var appState = AppState()
 
     init() {
+        DMSans.register()
         // Blue large titles like the page headers in the Figma design.
         let brand = UIColor { $0.userInterfaceStyle == .dark ? UIColor(hex: 0x6E9BEA) : UIColor(hex: 0x4379D6) }
         // Standard-sized page titles (iOS default large title is 34pt, which feels oversized here).

@@ -9,6 +9,8 @@ final class HomeViewModel {
     var selected: Website?
     /// Which tab of the portal is showing. Kept here so a notification can jump straight to one.
     var selectedTab: PortalTab = .products
+    /// True while a full-screen detail (e.g. a product) is open, so the bottom tab dock steps out of the way.
+    var dockHidden = false
     /// Websites the owner switched away from, most recent last. Back steps through these before the list.
     private(set) var history: [Website] = []
     /// True when Back goes to an earlier website rather than the list of all websites.

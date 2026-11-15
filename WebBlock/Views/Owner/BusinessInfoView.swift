@@ -37,18 +37,8 @@ struct BusinessInfoView: View {
 
     private func viewer(_ info: BusinessInfo) -> some View {
         VStack(alignment: .leading, spacing: Space.m) {
-            VStack(alignment: .leading, spacing: Space.m) {
-                HStack(spacing: Space.s) {
-                    AvatarView(initials: home.selected?.initials ?? "", size: 56)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(info.name).font(.title3.bold()).foregroundStyle(.wbText)
-                        Label(info.url, systemImage: "globe").font(.caption).foregroundStyle(.wbMuted).lineLimit(1)
-                        Pill(text: info.type, symbol: "storefront")
-                    }
-                }
-                Button("Edit details") { model.beginEditing() }.buttonStyle(.wbPrimary)
-            }
-            .wbCard()
+            profileCard(info)
+            quickActions(info)
 
             SectionTitle(text: "Details")
             // About, Contact and Location are shown together with their full data — no tapping needed.
@@ -80,6 +70,93 @@ struct BusinessInfoView: View {
             }
             .appearAnimated(index: 1)
         }
+    }
+
+    /// Profile card: blue tiled banner, avatar overlapping it, name, address, type, open/closed status and an Edit button.
+    private func profileCard(_ info: BusinessInfo) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
+        return VStack(alignment: .leading, spacing: 0) {
+            ProfileBanner()
+                .frame(height: 104)
+                .overlay(alignment: .bottomLeading) {
+                    Text(home.selected?.initials ?? "")
+                        .font(.dm(26, 700)).foregroundStyle(Color(hex: 0x3862B6))
+                        .frame(width: 80, height: 80)
+                        .background(Color(hex: 0xE3ECFB), in: Circle())
+                        .padding(5)
+                        .background(Color.white, in: Circle())
+                        .shadow(color: Color(hex: 0x1F3C7A).opacity(0.14), radius: 8, y: 3)
+                        .padding(.leading, Space.m)
+                        .offset(y: 44)
+                }
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text(info.name).font(.dm(24, 700)).foregroundStyle(Color(hex: 0x1F2A4D))
+                    .lineLimit(2).minimumScaleFactor(0.8)
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(info.url, systemImage: "globe").lineLimit(1).minimumScaleFactor(0.8)
+                    Label(info.type, systemImage: "storefront")
+                }
+                .font(.dm(16, 400)).foregroundStyle(Color(hex: 0x5F6B85))
+
+                Label(Self.openStatus(info.hours), systemImage: "clock")
+                    .font(.dm(14, 500)).foregroundStyle(Color(hex: 0x5F6B85))
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .background(Color(hex: 0xEEF3FC), in: Capsule())
+
+                Button { model.beginEditing() } label: {
+                    Label("Edit details", systemImage: "pencil")
+                }
+                .buttonStyle(.wbPrimary)
+                .padding(.top, 4)
+            }
+            .padding(.horizontal, Space.m).padding(.top, 54).padding(.bottom, Space.m)
+        }
+        .clipShape(shape)
+        .whiteCard(cornerRadius: 26)
+    }
+
+    /// "Open now · Closes 6:00 PM" / "Closed now · Opens 9:00 AM" for today.
+    private static func openStatus(_ hours: [OpeningDay]) -> String {
+        guard hours.count == 7 else { return "Hours not set" }
+        let cal = Calendar.current
+        let today = hours[(cal.component(.weekday, from: .now) + 5) % 7]
+        guard today.isOpen else { return "Closed today" }
+        func minutes(_ d: Date) -> Int { cal.component(.hour, from: d) * 60 + cal.component(.minute, from: d) }
+        let now = minutes(.now)
+        let time = { (d: Date) in d.formatted(date: .omitted, time: .shortened) }
+        if now < minutes(today.opens) { return "Closed now · Opens \(time(today.opens))" }
+        if now < minutes(today.closes) { return "Open now · Closes \(time(today.closes))" }
+        return "Closed now"
+    }
+
+    /// Call / Email / Directions / Website shortcuts in a white card.
+    private func quickActions(_ info: BusinessInfo) -> some View {
+        let site = info.url.hasPrefix("http") ? info.url : "https://" + info.url
+        let directions = info.mapsLink.isEmpty
+            ? "http://maps.apple.com/?q=" + (info.address.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")
+            : info.mapsLink
+        return HStack(alignment: .top, spacing: 0) {
+            quickAction("phone", "Call", URL(string: "tel:" + info.phone.filter { $0.isNumber || $0 == "+" }))
+            quickAction("envelope", "Email", URL(string: "mailto:" + info.email))
+            quickAction("mappin.and.ellipse", "Directions", URL(string: directions))
+            quickAction("globe", "Website", URL(string: site))
+        }
+        .padding(.vertical, 18).padding(.horizontal, 6)
+        .frame(maxWidth: .infinity)
+        .whiteCard(cornerRadius: 26)
+    }
+
+    @ViewBuilder
+    private func quickAction(_ symbol: String, _ title: String, _ url: URL?) -> some View {
+        let label = VStack(spacing: 8) {
+            Image(systemName: symbol).font(.system(size: 21, weight: .medium)).foregroundStyle(Color(hex: 0x3862B6))
+                .frame(width: 58, height: 58)
+                .background(Color(hex: 0xE3ECFB), in: Circle())
+            Text(title).font(.dm(13, 500)).foregroundStyle(Color(hex: 0x1F2A4D)).lineLimit(1).minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+        if let url { Link(destination: url) { label }.buttonStyle(.wbCardPress) } else { label }
     }
 
     private func infoBlock<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -126,7 +203,7 @@ struct BusinessInfoView: View {
             SectionTitle(text: "Opening hours")
             OpeningHoursEditor(days: draft.hours)
             HStack(spacing: Space.xs) {
-                Button("Cancel") { model.cancelEditing() }.buttonStyle(.wbSecondary)
+                Button("Cancel") { model.cancelEditing() }.buttonStyle(.wbSecondaryField)
                 LoadingButton(title: "Save changes", isLoading: model.isSaving) { Task { await model.save() } }
             }
         }
@@ -213,7 +290,7 @@ struct BusinessSectionDetail: View {
             }
             .padding(.horizontal, Space.screen).padding(.vertical, Space.xs)
         }
-        .background(Color(.systemBackground))
+        .background { TileBackdrop() }
         .navigationTitle(section.title)
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -274,5 +351,50 @@ struct OpeningHoursDropdown: View {
         .animation(.easeInOut(duration: 0.2), value: isExpanded)
         .accessibilityElement(children: .contain)
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+    }
+}
+
+
+/// Small grid of faint dots used as decoration on tinted backdrops.
+private struct DotGrid: View {
+    let columns: Int, rows: Int
+    var body: some View {
+        VStack(spacing: 9) {
+            ForEach(0..<rows, id: \.self) { _ in
+                HStack(spacing: 9) {
+                    ForEach(0..<columns, id: \.self) { _ in Circle().fill(Color.wbBrand.opacity(0.22)).frame(width: 3, height: 3) }
+                }
+            }
+        }
+    }
+}
+
+
+/// Blue banner made of soft square tiles, like the website's page header.
+private struct ProfileBanner: View {
+    private let tile: CGFloat = 26
+    var body: some View {
+        Canvas { ctx, size in
+            ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                     with: .linearGradient(Gradient(colors: [Color(hex: 0x3F6BC4), Color(hex: 0x3A62B8)]),
+                                           startPoint: .zero, endPoint: CGPoint(x: size.width, y: size.height)))
+            let cols = Int(size.width / tile) + 2, rows = Int(size.height / tile) + 2
+            for r in 0..<rows {
+                for c in 0..<cols {
+                    var h = UInt32(truncatingIfNeeded: r &* 73856093 ^ c &* 19349663)
+                    h = (h ^ (h >> 13)) &* 1274126177
+                    let v = Int((h ^ (h >> 16)) % 100)
+                    // lighter squares gather toward the right, like the website
+                    let bias = Double(c) / Double(cols)
+                    guard Double(v) < 6 + bias * 22 else { continue }
+                    ctx.fill(Path(CGRect(x: CGFloat(c) * tile, y: CGFloat(r) * tile, width: tile, height: tile)),
+                             with: .color(.white.opacity(v % 2 == 0 ? 0.14 : 0.08)))
+                }
+            }
+            var grid = Path()
+            for c in 0...cols { grid.move(to: CGPoint(x: CGFloat(c) * tile, y: 0)); grid.addLine(to: CGPoint(x: CGFloat(c) * tile, y: size.height)) }
+            for r in 0...rows { grid.move(to: CGPoint(x: 0, y: CGFloat(r) * tile)); grid.addLine(to: CGPoint(x: size.width, y: CGFloat(r) * tile)) }
+            ctx.stroke(grid, with: .color(.white.opacity(0.14)), lineWidth: 1)
+        }
     }
 }

@@ -606,9 +606,6 @@ private struct StatusCard: View {
         .background(alignment: .topLeading) {
             DotMatrix(rows: 4, columns: 5, ink: .wbBrand, spacing: 10, dot: 3).opacity(0.7).offset(x: 14, y: 10)
         }
-        .background(alignment: .bottomTrailing) {
-            Circle().fill(Color.wbBrand.opacity(0.08)).frame(width: 120).offset(x: 40, y: 50)
-        }
         .glass(in: shape)
         .clipShape(shape)
         .overlay(shape.stroke(Color.wbBrand.opacity(0.15), lineWidth: 1))

@@ -7,28 +7,34 @@ struct ProductsView: View {
     @Bindable var model: ProductsViewModel
     @Environment(HomeViewModel.self) private var home
     @Environment(KeyboardWatcher.self) private var keyboard
-    private let columns = [GridItem(.adaptive(minimum: 150), spacing: Space.s, alignment: .top)]
+    private let columns = [GridItem(.flexible(), spacing: Space.s, alignment: .top),
+                           GridItem(.flexible(), spacing: Space.s, alignment: .top)]
+    @FocusState private var searching: Bool
+    @State private var showFilters = true          // the filter button shows / hides the chips and the summary row
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.m) {
-                Text("Shown as Product Cards on \(home.selected?.url ?? "your website").")
-                    .font(.subheadline).foregroundStyle(.wbMuted)
+                Text("Products").font(.system(size: 40, weight: .bold)).foregroundStyle(Color(hex: 0x2F6BC9))
+                    .padding(.top, Space.xs)
+
+                searchBar
+
                 SiteHeaderCard().appearAnimated()
 
-                ChipRow {
-                    FilterChip(title: "All", count: model.products.count, isSelected: model.category == nil) { model.category = nil }
-                    ForEach(model.categories, id: \.self) { name in
-                        FilterChip(title: name, isSelected: model.category == name) { model.category = name }
-                    }
-                }
+                if showFilters {
+                    VStack(alignment: .leading, spacing: Space.m) {
+                        CategoryChips(model: model)
 
-                HStack {
-                    Text(model.summary).font(.footnote).foregroundStyle(.wbMuted)
-                    Spacer()
-                    WBIconSegmented(options: [("square.grid.2x2", "Grid", ProductLayout.grid),
-                                              ("list.bullet", "List", ProductLayout.list)],
-                                    selection: $model.layout)
+                        HStack {
+                            Text(model.summary).font(.subheadline).foregroundStyle(.wbMuted)
+                            Spacer()
+                            WBIconSegmented(options: [("square.grid.2x2", "Grid", ProductLayout.grid),
+                                                      ("list.bullet", "List", ProductLayout.list)],
+                                            selection: $model.layout)
+                        }
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
                 StateContainer(state: model.state, retry: { Task { await model.load() } }) {
@@ -50,16 +56,17 @@ struct ProductsView: View {
                         }
                     }
                     if model.canLoadMore {
-                        Button("Show more") { model.visibleCount += model.pageSize }.buttonStyle(.wbSecondary)
+                        Button("Show more") { model.visibleCount += model.pageSize }.buttonStyle(.wbSecondaryField)
                     }
                 }
             }
             .padding(.horizontal, Space.screen).padding(.top, Space.xs).padding(.bottom, Space.l)
         }
-        .liquidBackdrop()
+        .scrollDismissesKeyboard(.interactively)
+        .background { TileBackdrop() }
         .navigationTitle("Products")
+        .navigationBarTitleDisplayMode(.inline)
         .portalToolbar()
-        .searchable(text: $model.query, prompt: "Search products")
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: model.category)
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: model.layout)
         .refreshable { await model.load() }
@@ -70,7 +77,7 @@ struct ProductsView: View {
                 Label("Add product", systemImage: "plus").font(.body.weight(.semibold))
                     .padding(.horizontal, Space.m).frame(height: 50)
                     .foregroundStyle(.white)
-                    .liquidGlass(in: Capsule(), tint: Color(hex: 0x3F72D0), interactive: true)
+                    .brandFace(in: Capsule())
             }
             .buttonStyle(.wbCardPress)
             .padding(.horizontal, Space.screen)
@@ -82,13 +89,104 @@ struct ProductsView: View {
         .toast($model.toast)
         .navigationDestination(for: Product.self) { product in ProductDetailView(productID: product.id, model: model) }
         .fullScreenCover(item: $model.editing) { draft in ProductFormSheet(model: model, draft: draft) }
-        .confirmationDialog("Delete “\(model.pendingDelete?.name ?? "")”?", isPresented: .init(
-            get: { model.pendingDelete != nil }, set: { if !$0 { model.pendingDelete = nil } }), titleVisibility: .visible) {
-            Button("Delete product", role: .destructive) { Task { await model.confirmDelete() } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("It will be removed from your website the next time you deploy. This can’t be undone.")
+        .overlay {
+            if let product = model.pendingDelete {
+                WBConfirm(title: "Delete “\(product.name)”?",
+                          message: "It will be removed from your website the next time you deploy. This can’t be undone.",
+                          confirmTitle: "Delete product",
+                          onConfirm: { Task { await model.confirmDelete() } },
+                          onCancel: { model.pendingDelete = nil })
+            }
         }
+        .animation(.easeInOut(duration: 0.2), value: model.pendingDelete != nil)
+    }
+}
+
+extension ProductsView {
+    /// Rounded glass search field with a filter button, like the website's product search.
+    fileprivate var searchBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").font(.system(size: 19, weight: .medium)).foregroundStyle(Color(hex: 0x2F6BC9))
+            TextField("Search products…", text: $model.query)
+                .focused($searching)
+                .font(.system(size: 18))
+                .submitLabel(.search)
+                .autocorrectionDisabled()
+            if !model.query.isEmpty {
+                Button { model.query = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.wbMuted)
+                }
+                .buttonStyle(.plain).accessibilityLabel("Clear search")
+            }
+            Button {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showFilters.toggle() }
+            } label: {
+                // Same size as the magnifier, no circle behind it. The extra frame keeps a comfortable tap area.
+                FunnelShape()
+                    .stroke(Color(hex: 0x3862B6), style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
+                    .background(FunnelShape().fill(Color(hex: 0x3862B6).opacity(showFilters ? 0.18 : 0)))
+                    .frame(width: 20, height: 20)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .sensoryFeedback(.selection, trigger: showFilters)
+            .accessibilityLabel(showFilters ? "Hide filters" : "Show filters")
+        }
+        .padding(.leading, 18).padding(.trailing, 8)
+        .frame(height: 54)
+        .whiteCard(cornerRadius: 27)
+        .contentShape(Capsule())
+        .onTapGesture { searching = true }
+    }
+}
+
+/// Categories inside one soft glass track; the selected one is a white pill that slides along.
+private struct CategoryChips: View {
+    @Bindable var model: ProductsViewModel
+    @Namespace private var pill
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                chip("All", count: model.products.count, on: model.category == nil) { model.category = nil }
+                ForEach(model.categories, id: \.self) { name in
+                    chip(name, count: nil, on: model.category == name) { model.category = name }
+                }
+            }
+            .padding(4)
+        }
+        .scrollBounceBehavior(.always, axes: .horizontal)
+        .background(Color(hex: 0xE6EFFC), in: Capsule())
+        .clipShape(Capsule())
+    }
+
+    private func chip(_ title: String, count: Int?, on: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { action() }
+        } label: {
+            HStack(spacing: 8) {
+                Text(title).font(.system(size: 16, weight: .semibold))
+                if let count {
+                    Text("\(count)").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+                        .padding(.horizontal, 8).frame(minWidth: 26, minHeight: 24)
+                        .background(Color(hex: 0x2F6BC9), in: Capsule())
+                }
+            }
+            .foregroundStyle(on ? Color(hex: 0x2F6BC9) : Color(hex: 0x5B6B8C))
+            .padding(.horizontal, 18).frame(height: 42)
+            .background {
+                if on {
+                    Capsule().fill(Color.white)
+                        .shadow(color: Color(hex: 0x1F3C7A).opacity(0.12), radius: 6, y: 2)
+                        .matchedGeometryEffect(id: "chip", in: pill)
+                }
+            }
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
+        .sensoryFeedback(.selection, trigger: on)
     }
 }
 
@@ -104,13 +202,34 @@ private struct ProductMenu: View {
                 Label { Text("Delete product") } icon: { Image(uiImage: Self.redTrash) }
             }
         } label: {
-            Image(systemName: "ellipsis").foregroundStyle(.wbMuted).frame(width: 32, height: 32).contentShape(Rectangle())
+            Image(systemName: "ellipsis").font(.system(size: 15, weight: .bold)).rotationEffect(.degrees(90))
+                .foregroundStyle(Color(hex: 0x3A4256)).frame(width: 32, height: 32).contentShape(Rectangle())
         }
         .accessibilityLabel("More actions for \(product.name)")
     }
 
     static let redTrash = UIImage(systemName: "trash")!.withTintColor(.systemRed, renderingMode: .alwaysOriginal)
 }
+
+/// White rounded tag showing the product's category, laid over its photo.
+private struct CategoryTag: View {
+    let text: String
+    var body: some View {
+        Text(text).font(.dm(13, 600)).foregroundStyle(Color(hex: 0x14203F)).lineLimit(1)
+            .padding(.horizontal, 14).padding(.vertical, 7)
+            // frosted glass: blurs the photo behind it, with a bright rim
+            .background(.ultraThinMaterial, in: Capsule())
+            .background(Color.white.opacity(0.28), in: Capsule())
+            .overlay(Capsule().strokeBorder(
+                LinearGradient(colors: [.white.opacity(0.95), .white.opacity(0.25), .white.opacity(0.7)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1))
+            .shadow(color: .black.opacity(0.10), radius: 5, y: 2)
+    }
+}
+
+private let productBlue = Color(hex: 0x3862B6)
+private let productInk = Color(hex: 0x1F2A4D)
+private let productMuted = Color(hex: 0x5F6B85)
 
 struct ProductRow: View {
     let product: Product
@@ -119,11 +238,11 @@ struct ProductRow: View {
         HStack(spacing: Space.s) {
             NavigationLink(value: product) {
                 HStack(spacing: Space.s) {
-                    ProductPhoto(product: product, size: 64)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(product.name).font(.subheadline.weight(.semibold)).foregroundStyle(.wbText).lineLimit(1)
-                        Text("\(product.category) · \(product.description)").font(.footnote).foregroundStyle(.wbMuted).lineLimit(1)
-                        Text(product.price.currencyText).font(.subheadline.weight(.bold)).foregroundStyle(.wbText)
+                    ProductPhoto(product: product, size: 84, cornerRadius: 18)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(product.name).font(.dm(16, 600)).foregroundStyle(productInk).lineLimit(1)
+                        Text(product.description).font(.dm(13, 400)).foregroundStyle(productMuted).lineLimit(1)
+                        Text(product.price.currencyText).font(.dm(17, 700)).foregroundStyle(productBlue)
                     }
                     Spacer(minLength: 0)
                 }
@@ -131,7 +250,8 @@ struct ProductRow: View {
             .buttonStyle(.wbCardPress)
             ProductMenu(product: product, model: model)
         }
-        .wbCard(padding: Space.s)
+        .padding(8)
+        .whiteCard(cornerRadius: 22)
     }
 }
 
@@ -139,38 +259,49 @@ struct ProductTile: View {
     let product: Product
     let model: ProductsViewModel
     var body: some View {
-        VStack(alignment: .leading, spacing: Space.xs) {
-            NavigationLink(value: product) { ProductPhoto(product: product, size: nil) }
-                .buttonStyle(.wbSpotifyCard)
-            HStack(alignment: .top, spacing: 0) {
-                NavigationLink(value: product) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(product.name).font(.subheadline.weight(.semibold)).foregroundStyle(.wbText).lineLimit(1)
-                        Text("\(product.category) · \(product.description)").font(.caption).foregroundStyle(.wbMuted).lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 0) {
+            NavigationLink(value: product) {
+                ProductPhoto(product: product, size: nil, cornerRadius: 18)
+                    .overlay(alignment: .topLeading) { CategoryTag(text: product.category).padding(8) }
+            }
+            .buttonStyle(.wbSpotifyCard)
+
+            NavigationLink(value: product) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(product.name).font(.dm(16, 600)).foregroundStyle(productInk).lineLimit(1)
+                    Text(product.description).font(.dm(13, 400)).foregroundStyle(productMuted)
+                        .lineSpacing(3)
+                        .lineLimit(2, reservesSpace: true).multilineTextAlignment(.leading)
                 }
-                .buttonStyle(.wbCardPress)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8).padding(.top, 14)
+            }
+            .buttonStyle(.wbCardPress)
+
+            HStack {
+                Text(product.price.currencyText).font(.dm(18, 700)).foregroundStyle(productBlue)
+                Spacer()
                 ProductMenu(product: product, model: model)
             }
-            Text(product.price.currencyText).font(.subheadline.weight(.bold)).foregroundStyle(.wbText)
+            .padding(.leading, 8).padding(.trailing, 0).padding(.top, 10).padding(.bottom, 4)
         }
-        .wbCard(padding: Space.s)
+        .padding(8)
+        .whiteCard(cornerRadius: 26)
     }
 }
 
-/// Placeholder until the API supplies product photo URLs (Figma shows real photos).
+/// Product photo: full card width at 4:3, or a fixed square.
 struct ProductPhoto: View {
     let product: Product
     let size: CGFloat?
+    var cornerRadius: CGFloat = 12
 
     var body: some View {
         Group {
             if let size {
                 content.frame(width: size, height: size)
             } else {
-                // Card photo: full card width at the Figma 4:3 ratio. The image sits in an
-                // overlay so `scaledToFill` can never push the card wider than its column.
+                // The image sits in an overlay so `scaledToFill` can never push the card wider than its column.
                 Color.clear
                     .aspectRatio(4.0 / 3.0, contentMode: .fit)
                     .frame(maxWidth: .infinity)
@@ -178,7 +309,7 @@ struct ProductPhoto: View {
             }
         }
         .background(.wbBrandSoft)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .accessibilityHidden(true)
     }
 
@@ -201,6 +332,7 @@ struct ProductDetailView: View {
     @State private var confirmDelete = false
     @State private var expanded = false
     @Environment(\.dismiss) private var dismiss
+    @Environment(HomeViewModel.self) private var home
     var body: some View {
         if let product = model.products.first(where: { $0.id == productID }) {
             ScrollView {
@@ -218,16 +350,21 @@ struct ProductDetailView: View {
                 .padding(.bottom, Space.l)
             }
             .ignoresSafeArea(edges: .top)
-            .background(Color(.systemGroupedBackground))
+            .background { TileBackdrop() }
             .toolbar(.hidden, for: .navigationBar)
-            .confirmationDialog("Delete “\(product.name)”?", isPresented: $confirmDelete, titleVisibility: .visible) {
-                Button("Delete product", role: .destructive) {
-                    Task { await model.delete(product); dismiss() }
+            // No bottom tab dock on the detail page; it comes back when you go back.
+            .onAppear { home.dockHidden = true }
+            .onDisappear { home.dockHidden = false }
+            .overlay {
+                if confirmDelete {
+                    WBConfirm(title: "Delete “\(product.name)”?",
+                              message: "It will be removed from your website the next time you deploy. This can’t be undone.",
+                              confirmTitle: "Delete product",
+                              onConfirm: { confirmDelete = false; Task { await model.delete(product); dismiss() } },
+                              onCancel: { confirmDelete = false })
                 }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("It will be removed from your website the next time you deploy. This can’t be undone.")
             }
+            .animation(.easeInOut(duration: 0.2), value: confirmDelete)
         } else {
             ContentUnavailableView("Product removed", systemImage: "trash")
         }
@@ -237,7 +374,7 @@ struct ProductDetailView: View {
 
     private func hero(_ product: Product) -> some View {
         Color.clear
-            .frame(height: 440)
+            .frame(height: 400)
             .overlay { photo(product) }
             .overlay {
                 // keeps the white text readable on bright photos
@@ -251,23 +388,21 @@ struct ProductDetailView: View {
                     Spacer()
                     Text("Product").font(.headline).foregroundStyle(.white)
                     Spacer()
-                    Color.clear.frame(width: 46, height: 46)
+                    Menu {
+                        Button("Edit product", systemImage: "pencil") { model.editing = ProductDraft(product) }
+                        Button(role: .destructive) { confirmDelete = true } label: {
+                            Label { Text("Delete product") } icon: { Image(uiImage: ProductMenu.redTrash) }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis").font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
+                            .rotationEffect(.degrees(90))
+                            .frame(width: 46, height: 46)
+                            .liquidGlass(in: Circle(), tint: .white.opacity(0.15), interactive: true)
+                    }
+                    .accessibilityLabel("More actions")
                 }
                 .padding(.horizontal, Space.screen)
                 .padding(.top, 58)
-            }
-            .overlay(alignment: .bottomLeading) {
-                HStack(alignment: .bottom) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(product.name).font(.system(size: 32, weight: .bold))
-                            .lineLimit(2).minimumScaleFactor(0.7)
-                    }
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, Space.screen)
-                .padding(.bottom, Space.l)
             }
     }
 
@@ -298,16 +433,14 @@ struct ProductDetailView: View {
 
     private func infoCard(_ product: Product) -> some View {
         VStack(alignment: .leading, spacing: Space.m) {
-            HStack(alignment: .center) {
-                Text(product.price.currencyText).font(.system(size: 26, weight: .bold)).foregroundStyle(.wbText)
-                Spacer(minLength: Space.s)
-                Pill(text: product.category)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(product.name).font(.title2.weight(.bold)).foregroundStyle(.wbText)
+                Text(product.price.currencyText).font(.system(size: 22, weight: .bold)).foregroundStyle(.wbBrand)
             }
 
             VStack(alignment: .leading, spacing: Space.xs) {
-                Text("Description").font(.headline).foregroundStyle(.wbText)
                 Text(product.description)
-                    .font(.subheadline).foregroundStyle(.wbMuted)
+                    .font(.body).foregroundStyle(.wbMuted)
                     .lineLimit(expanded ? nil : 4)
                     .lineSpacing(3)
                 if product.description.count > 160 {
@@ -315,8 +448,28 @@ struct ProductDetailView: View {
                         .font(.subheadline.weight(.semibold)).foregroundStyle(.wbText)
                 }
             }
+
+            // Plain details list (not tappable cards), so it doesn't look like the Delete / Edit buttons below.
+            VStack(spacing: 0) {
+                detailRow(symbol: "tag", tint: Color(hex: 0x7C4DFF), label: "Category", value: product.category)
+                Divider()
+                detailRow(symbol: "globe", tint: .wbGreen, label: "Shown on", value: home.selected?.name ?? "Your website")
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// One line of the details list: small coloured icon and label on the left, the value on the right.
+    private func detailRow(symbol: String, tint: Color, label: String, value: String) -> some View {
+        HStack(spacing: Space.xs) {
+            Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(tint).frame(width: 22)
+            Text(label).font(.subheadline).foregroundStyle(.wbMuted)
+            Spacer(minLength: Space.s)
+            Text(value).font(.subheadline.weight(.semibold)).foregroundStyle(.wbText)
+                .multilineTextAlignment(.trailing).lineLimit(2)
+        }
+        .padding(.vertical, 14)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: Bottom buttons
@@ -324,13 +477,13 @@ struct ProductDetailView: View {
     private func actionBar(_ product: Product) -> some View {
         HStack(spacing: Space.s) {
             Button { confirmDelete = true } label: {
-                Label("Delete", systemImage: "trash").lineLimit(1).minimumScaleFactor(0.8)
+                Label("Delete product", systemImage: "trash").lineLimit(1).minimumScaleFactor(0.8)
             }
-            .buttonStyle(.wbDestructive)
+            .buttonStyle(.wbDestructiveField)
             Button { model.editing = ProductDraft(product) } label: {
                 Label("Edit product", systemImage: "square.and.pencil").lineLimit(1).minimumScaleFactor(0.8)
             }
-            .buttonStyle(.wbPrimary)
+            .buttonStyle(.wbPrimaryField)
         }
         .padding(.horizontal, Space.screen)
     }
@@ -412,7 +565,7 @@ struct ProductFormSheet: View {
         .contentMargins(.bottom, 0, for: .scrollContent)    // no dock here, so drop the space the tabs reserve for it
         .ignoresSafeArea(edges: .top)
         }
-        .background(Color(.systemGroupedBackground))
+        .background { TileBackdrop() }
         .overlay {
             if addingCategory {
                 WBPrompt(title: "New category", placeholder: "Category name", text: $newCategory,
@@ -583,5 +736,23 @@ private struct ProductPhotoField: View {
                 else { error = nil; withAnimation { draft.photoData = loaded; draft.imageName = nil } }
             }
         }
+    }
+}
+
+
+/// Classic filter funnel, drawn by hand so it looks the same on every iOS version
+/// (the SF Symbol "funnel" doesn't exist before iOS 18 and would show blank).
+struct FunnelShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + rect.width * x, y: rect.minY + rect.height * y) }
+        var p = Path()
+        p.move(to: pt(0.04, 0.08))
+        p.addLine(to: pt(0.96, 0.08))
+        p.addLine(to: pt(0.62, 0.50))
+        p.addLine(to: pt(0.62, 0.94))
+        p.addLine(to: pt(0.38, 0.80))
+        p.addLine(to: pt(0.38, 0.50))
+        p.closeSubpath()
+        return p
     }
 }
