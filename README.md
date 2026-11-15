@@ -1,44 +1,129 @@
-# WebBlock – Owner app (iOS)
+# WebBlock — Owner app (iOS)
 
-SwiftUI · Swift 5 · iOS 17+ · MVVM (`@Observable`) · no third-party packages.
-Styled after the WebBlock Figma ("Final submit"): blue `#4379D6` titles and pill buttons, navy ink, soft pink→blue sign-in backdrop,
-white rounded cards with hairline borders, soft-blue icon tiles, usage donuts and SUCCEEDED / FAILED pills.
+The iPhone companion to the WebBlock website builder. Business owners sign in with the account they created on the
+WebBlock website and manage their **live websites** on the go: products, business information and site health.
 
-## What the app does
-1. **Sign in** with the account created on the WebBlock website (no sign-up, no password reset, no profile editing here).
-2. After sign-in the user sees **only their live website**, in three bottom tabs:
-   **Products** · **Business information** · **Monitor**.
-   If the account has several live websites, the site card at the top of each page switches between them.
-   If none is live, an empty state explains how to publish one on the web.
-3. Top right of every page: **bell** (notifications) and the **profile avatar**. Tapping the avatar opens a popup:
-   *"Log out of WebBlock?"* → **Log out** / **Cancel**.
+**SwiftUI · Swift 5 · iOS 17+ · MVVM with `@Observable` · no third-party packages**
+
+---
+
+## Features
+
+### Getting started
+- **Onboarding**: four intro pages (Your Website · How It Works · Manage · Monitor), shown once on first launch.
+- **Sign in** with email and password, or **Continue with Google**.
+- **Forgot password**: a three-step flow (email → 6-digit code with a countdown → new password with a strength meter).
+- Accounts are created on the WebBlock website. There is no sign-up in the app.
+
+### Your websites
+- After sign-in, a **Your websites** page lists every live website, with a "Welcome back" card and a live count.
+- Each website card has shortcuts straight to **Products**, **Business** or **Monitor**.
+- Inside a website, a **switcher card** expands in place to show "Switch to" and your other websites.
+  Switching keeps you on the same tab, and **Back** returns to the website you were on before (then to the list).
+- If no website is live yet, an empty state explains how to publish one from the web.
+
+### Portal tabs (custom glass dock)
+| Tab | What you can do |
+| --- | --- |
+| **Products** | Search, filter by category, switch between grid and list, and view a product page with a full-width photo. Add, edit or delete products with a name, category (or a new one), description, price and a photo (JPG/PNG, up to 2 MB). |
+| **Business** | See and edit what customers see: about, contact, location (with a Google Maps link) and opening hours. The name, type and website address are read-only. |
+| **Monitor** | **Overview**: summary, plan usage (uptime, products, photos, redeploys, websites), health metrics and build-time chart for deploys. **Activity**: a recent activity log filtered by deploys, products or business info. |
+
+### Everywhere
+- **Bell**: notifications with unread markers. Tapping one jumps to the right website and tab.
+- **Profile avatar**: a popup to log out.
+- Light and dark colors, VoiceOver labels, and the dock steps aside while the keyboard is up.
+
+---
 
 ## Run it
-Open `WebBlock.xcodeproj`, pick an iPhone simulator (iOS 17+), press ⌘R. See `OPEN_IN_XCODE.md`.
 
-## Try it (sample service)
-- Sign in with any email containing `@` and a password of 8+ characters.
-- Emails starting with `pro` or `ultra` sign in on that plan (e.g. `pro@test.com`) so you can compare the Monitor limits and the
-  Pro/Ultra activity log. Anything else signs in on Plus. (SAMPLE rule, not from Figma.)
+1. Open **`WebBlock.xcodeproj`** in **Xcode 26** or later (the iOS 26 SDK is needed for the Liquid Glass APIs).
+2. Choose the **WebBlock** scheme and an **iPhone simulator** running iOS 17 or later.
+3. Press **⌘R**.
 
-## Structure
+To run on your own iPhone, select the WebBlock target, open **Signing & Capabilities**, turn on
+*Automatically manage signing* and pick your team. More help is in [`OPEN_IN_XCODE.md`](OPEN_IN_XCODE.md).
+
+> The project can also be regenerated from `project.yml` with [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+> (`xcodegen generate`). This is optional, since the checked-in `.xcodeproj` works as is.
+
+---
+
+## Try it with sample data
+
+The app runs on an in-memory **mock service**, so there's no backend to set up.
+
+- **Sign in** with any email containing `@` and a password of **8+ characters**.
+- The email decides the plan, so you can compare Monitor limits:
+
+  | Email starts with | Plan |
+  | --- | --- |
+  | `ultra…` (e.g. `ultra@test.com`) | Ultra |
+  | `pro…` (e.g. `pro@test.com`) | Pro |
+  | anything else | Plus |
+
+- **Forgot password** accepts any 6-digit code.
+- Sample websites: **Petal & Stem** (florist), **Golden Crumb Bakery**, **Bean & Brew Café** and **Studio Lotus Yoga**,
+  each with its own products and photos.
+- To see onboarding again, delete the app from the simulator (it's remembered with `@AppStorage("hasSeenOnboarding")`).
+
+Anything invented for the demo is marked `// SAMPLE` in the code.
+
+---
+
+## Project structure
+
 ```
 WebBlock/
-  Core/Theme.swift                 Figma colors (light + dark), spacing, radii, backdrop, brand mark
-  Models/Models.swift              plain value types
-  Services/WebBlockService.swift   protocol + ServiceLocator  ← plug the real API in here
-  Services/MockWebBlockService     sample data, marked
-  ViewModels/                      AppState, Auth, Home, Owner (Products / Business info / Monitor)
-  Views/Auth                       SignInView (+ Google chooser sheet)
-  Views/Home                       HomeView, tabs, site card, bell + profile popup, notifications
-  Views/Owner                      ProductsViews, BusinessInfoView, MonitorView
-  Views/Components                 cards, buttons, fields, chips, donuts, toast
+├── WebBlockApp.swift                 App entry point
+├── Core/Theme.swift                  Colors (light + dark), spacing, radii, liquid-glass helpers, backdrops
+├── Models/Models.swift               Plain value types: Website, Product, BusinessInfo, MonitorSnapshot, PlanTier…
+├── Services/
+│   ├── WebBlockService.swift         Service protocol + ServiceLocator  ← plug the real API in here
+│   └── MockWebBlockService.swift     Sample data and rules (SAMPLE)
+├── ViewModels/
+│   ├── AppState.swift                Signed-in user, plan, notifications
+│   ├── AuthViewModel.swift           Sign in, Google, forgot-password steps
+│   ├── HomeViewModel.swift           Live websites, selected site & tab, switch history for Back
+│   └── OwnerViewModels.swift         Products, Business info, Monitor
+├── Views/
+│   ├── RootView.swift                Onboarding → Sign in → Home
+│   ├── Auth/                         OnboardingView, SignInView, Google chooser, ForgotPasswordFlow
+│   ├── Home/HomeView.swift           Website list, portal tabs, switcher card, toolbar, notifications
+│   ├── Owner/                        ProductsViews, BusinessInfoView, MonitorView
+│   └── Components/                   Glass dock, buttons, fields, chips, segmented control, prompts, image picker
+└── Resources/Assets.xcassets         App icon, logos and sample product photos
 ```
 
-## Differences from Figma
-- **Font:** Figma uses DM Sans / Familjen Grotesk. The app uses the system font (SF Pro) so it needs no font files.
-- **Not compiled in the authoring environment** (no Xcode there). If Xcode shows an error, send the first error line.
-- **Editor, templates, support, settings, billing** are intentionally not in this app.
-- **Product photos / site hero image:** Figma has real photos; the app shows a placeholder until the API provides image URLs.
-- **Pagination:** the web "Previous / 1 2 / Next" pager is a "Show more" button on iPhone.
-- **Sample values:** notification timestamps and the Google chooser account are SAMPLE.
+---
+
+## Connecting the real backend
+
+All data goes through the `WebBlockService` protocol (`Services/WebBlockService.swift`):
+
+```swift
+signIn(email:password:) · signInWithGoogle()
+requestPasswordReset(email:) · verifyResetCode(email:code:) · resetPassword(email:code:newPassword:)
+websites() · notifications() · markAllNotificationsRead()
+products(websiteID:) · saveProduct(_:websiteID:) · deleteProduct(id:websiteID:)
+businessInfo(websiteID:) · saveBusinessInfo(_:websiteID:)
+monitor(websiteID:plan:)
+```
+
+Write a type that conforms to it (for example `APIWebBlockService`, backed by Spring Boot + Keycloak) and assign it to
+`ServiceLocator.current`.
+The views and view models don't need to change.
+
+---
+
+## Not in this app (on purpose)
+
+The website editor, templates, billing, settings, support and sign-up stay on the WebBlock website.
+The app focuses on day-to-day changes to sites that are already live.
+
+## Design notes
+
+- Based on the WebBlock Figma: brand blue `#4379D6`, navy text, white rounded cards and pill buttons.
+- Uses the system font (SF Pro) instead of the Figma fonts (DM Sans / Familjen Grotesk), so no font files are bundled.
+- On iOS 26 it uses system **Liquid Glass**. On iOS 17–18 the same look is drawn by hand.
