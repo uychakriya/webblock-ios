@@ -6,7 +6,8 @@ import Observation
 final class AuthViewModel {
     var email = ""
     var password = ""
-    var showGoogleChooser = false
+    /// True while the Google sign-in is running (its button shows a spinner).
+    var isGoogleLoading = false
     var showForgotPassword = false
     var isLoading = false
     var errorMessage: String?
@@ -34,11 +35,9 @@ final class AuthViewModel {
     }
 
     func signInWithGoogle(appState: AppState) async {
-        await run {
-            let profile = try await service.signInWithGoogle()
-            showGoogleChooser = false
-            appState.signedIn(profile)
-        }
+        isGoogleLoading = true
+        defer { isGoogleLoading = false }
+        await run { appState.signedIn(try await service.signInWithGoogle()) }
     }
 
     private func run(_ work: () async throws -> Void) async {

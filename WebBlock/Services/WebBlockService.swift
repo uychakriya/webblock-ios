@@ -12,8 +12,9 @@ enum ServiceError: LocalizedError {
     }
 }
 
-/// Everything the app needs from the backend. `MockWebBlockService` implements it with
-/// clearly-labelled sample data; replace it with an API-backed type when the endpoints exist.
+/// Everything the app needs from the backend. `APIWebBlockService` talks to the real WebBlock v2 API
+/// (the same endpoints as the Android app); `MockWebBlockService` keeps the clearly-labelled sample data
+/// for previews and tests.
 protocol WebBlockService: Sendable {
     // Sign in (accounts are created on the WebBlock website, not in the app)
     func signIn(email: String, password: String) async throws -> UserProfile
@@ -35,9 +36,25 @@ protocol WebBlockService: Sendable {
     func businessInfo(websiteID: UUID) async throws -> BusinessInfo
     func saveBusinessInfo(_ info: BusinessInfo, websiteID: UUID) async throws -> BusinessInfo
     func monitor(websiteID: UUID, plan: PlanTier) async throws -> MonitorSnapshot
+
+    // Session (real API only; the mock has nothing to restore or revoke)
+    /// Signs back in from the stored refresh token on launch. `nil` when there is no usable session.
+    func restoreSession() async -> UserProfile?
+    func signOut() async
+    /// Marks one notification read on the server when it is opened (failures are ignored).
+    func markNotificationRead(id: UUID) async
+}
+
+extension WebBlockService {
+    func restoreSession() async -> UserProfile? { nil }
+    func signOut() async {}
+    func markNotificationRead(id: UUID) async {}
 }
 
 enum ServiceLocator {
-    /// Swap for an API-backed implementation (Spring Boot + Keycloak) when it is ready.
-    nonisolated(unsafe) static var current: WebBlockService = MockWebBlockService()
+    /// Set to `true` to run every screen on the in-memory sample data, with no network
+    /// (Android's `use.mock.data`). The default is the real API.
+    static let useMockData = false
+
+    nonisolated(unsafe) static var current: WebBlockService = useMockData ? MockWebBlockService() : APIWebBlockService()
 }

@@ -150,7 +150,7 @@ struct BusinessInfoView: View {
     @ViewBuilder
     private func quickAction(_ symbol: String, _ title: String, _ url: URL?) -> some View {
         let label = VStack(spacing: 8) {
-            Image(systemName: symbol).font(.system(size: 21, weight: .medium)).foregroundStyle(Color(hex: 0x3862B6))
+            Image(systemName: symbol).wbFont(21, .medium).foregroundStyle(Color(hex: 0x3862B6))
                 .frame(width: 58, height: 58)
                 .background(Color(hex: 0xE3ECFB), in: Circle())
             Text(title).font(.dm(13, 500)).foregroundStyle(Color(hex: 0x1F2A4D)).lineLimit(1).minimumScaleFactor(0.8)
@@ -171,7 +171,7 @@ struct BusinessInfoView: View {
     @ViewBuilder
     private func infoLine(_ symbol: String, _ label: String, _ value: String, url: URL? = nil) -> some View {
         let row = HStack(alignment: .top, spacing: Space.s) {
-            Image(systemName: symbol).font(.system(size: 15, weight: .medium)).foregroundStyle(.wbBrand)
+            Image(systemName: symbol).wbFont(15, .medium).foregroundStyle(.wbBrand)
                 .frame(width: 36, height: 36)
                 .background(Color.wbBrandSoft, in: Circle())
             VStack(alignment: .leading, spacing: 1) {
@@ -202,8 +202,9 @@ struct BusinessInfoView: View {
                          capitalization: .never, hint: "Adds a “Get directions” link")
             SectionTitle(text: "Opening hours")
             OpeningHoursEditor(days: draft.hours)
-            HStack(spacing: Space.xs) {
-                Button("Cancel") { model.cancelEditing() }.buttonStyle(.wbSecondaryField)
+            // Cancel on the left, Save on the right, equal width.
+            EqualWidthRow(spacing: Space.s) {
+                Button("Cancel") { model.cancelEditing() }.buttonStyle(.wbSecondary)
                 LoadingButton(title: "Save changes", isLoading: model.isSaving) { Task { await model.save() } }
             }
         }
@@ -370,31 +371,46 @@ private struct DotGrid: View {
 }
 
 
-/// Blue banner made of soft square tiles, like the website's page header.
+/// Soft header banner: a pale blue wash that fades to white, dotted grids, one small solid dot and big
+/// soft circles tucked into the corners. Quiet, with no hard colour.
 private struct ProfileBanner: View {
-    private let tile: CGFloat = 26
+    @Environment(\.colorScheme) private var scheme
     var body: some View {
-        Canvas { ctx, size in
-            ctx.fill(Path(CGRect(origin: .zero, size: size)),
-                     with: .linearGradient(Gradient(colors: [Color(hex: 0x3F6BC4), Color(hex: 0x3A62B8)]),
-                                           startPoint: .zero, endPoint: CGPoint(x: size.width, y: size.height)))
-            let cols = Int(size.width / tile) + 2, rows = Int(size.height / tile) + 2
-            for r in 0..<rows {
-                for c in 0..<cols {
-                    var h = UInt32(truncatingIfNeeded: r &* 73856093 ^ c &* 19349663)
-                    h = (h ^ (h >> 13)) &* 1274126177
-                    let v = Int((h ^ (h >> 16)) % 100)
-                    // lighter squares gather toward the right, like the website
-                    let bias = Double(c) / Double(cols)
-                    guard Double(v) < 6 + bias * 22 else { continue }
-                    ctx.fill(Path(CGRect(x: CGFloat(c) * tile, y: CGFloat(r) * tile, width: tile, height: tile)),
-                             with: .color(.white.opacity(v % 2 == 0 ? 0.14 : 0.08)))
-                }
+        let dark = scheme == .dark
+        let dot = Color(hex: 0x8FA9E6)
+        ZStack {
+            LinearGradient(colors: dark ? [Color(hex: 0x1E2F57), Color(hex: 0x16203A)]
+                                        : [Color(hex: 0xE4ECFB), Color(hex: 0xF1F5FD), Color(hex: 0xFAFCFF)],
+                           startPoint: .top, endPoint: .bottom)
+            GeometryReader { geo in
+                let w = geo.size.width, h = geo.size.height
+                // big soft circles half out of the frame
+                Circle().fill(Color(hex: 0xDCE6F8).opacity(dark ? 0.12 : 0.75))
+                    .frame(width: h * 1.9).position(x: w * 0.98, y: h * 0.1)
+                Circle().fill(Color(hex: 0xDCE6F8).opacity(dark ? 0.10 : 0.55))
+                    .frame(width: h * 1.0).position(x: w * 0.02, y: h * 1.0)
+                // dotted grids
+                DotGrid(columns: 5, rows: 3, spacing: 9).fill(dot.opacity(dark ? 0.25 : 0.45))
+                    .frame(width: 36, height: 18).position(x: w * 0.2, y: h * 0.2)
+                DotGrid(columns: 4, rows: 4, spacing: 9).fill(dot.opacity(dark ? 0.25 : 0.40))
+                    .frame(width: 27, height: 27).position(x: w * 0.72, y: h * 0.68)
+                // one small solid dot
+                Circle().fill(dot.opacity(0.9)).frame(width: 8, height: 8).position(x: w * 0.55, y: h * 0.24)
             }
-            var grid = Path()
-            for c in 0...cols { grid.move(to: CGPoint(x: CGFloat(c) * tile, y: 0)); grid.addLine(to: CGPoint(x: CGFloat(c) * tile, y: size.height)) }
-            for r in 0...rows { grid.move(to: CGPoint(x: 0, y: CGFloat(r) * tile)); grid.addLine(to: CGPoint(x: size.width, y: CGFloat(r) * tile)) }
-            ctx.stroke(grid, with: .color(.white.opacity(0.14)), lineWidth: 1)
+        }
+        .clipped()
+        .accessibilityHidden(true)
+    }
+
+    private struct DotGrid: Shape {
+        var columns: Int, rows: Int, spacing: CGFloat
+        func path(in r: CGRect) -> Path {
+            var p = Path()
+            for c in 0..<columns { for rr in 0..<rows {
+                p.addEllipse(in: CGRect(x: CGFloat(c) * spacing, y: CGFloat(rr) * spacing, width: 3, height: 3)
+                    .offsetBy(dx: r.minX, dy: r.minY))
+            } }
+            return p
         }
     }
 }

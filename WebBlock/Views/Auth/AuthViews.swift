@@ -15,7 +15,7 @@ struct SignInView: View {
 
                     (Text("Pick up right\nwhere you ").foregroundStyle(Color.wbText)
                      + Text("left off.").foregroundStyle(Color.wbBrand))
-                        .font(.system(size: 28, weight: .bold))
+                        .wbFont(28, .bold)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
 
@@ -27,9 +27,6 @@ struct SignInView: View {
                 .frame(maxWidth: .infinity)
             }
             .scrollDismissesKeyboard(.interactively)
-        }
-        .sheet(isPresented: $model.showGoogleChooser) {
-            GoogleChooserSheet(model: model).presentationDetents([.medium])
         }
         .fullScreenCover(isPresented: $model.showForgotPassword) {
             ForgotPasswordFlow(initialEmail: model.email) { changedEmail in
@@ -45,13 +42,19 @@ struct SignInView: View {
                 Text("Sign in to manage your websites.").font(.subheadline).foregroundStyle(.wbMuted)
             }
 
-            Button { model.showGoogleChooser = true } label: {
+            // Real Google sign-in: opens the WebBlock (Keycloak) Google page in a secure browser sheet.
+            Button { Task { await model.signInWithGoogle(appState: appState) } } label: {
                 HStack(spacing: Space.xs) {
-                    GoogleGlyph().frame(width: 22, height: 22)
+                    if model.isGoogleLoading {
+                        ProgressView()
+                    } else {
+                        GoogleGlyph().frame(width: 22, height: 22)
+                    }
                     Text("Continue with Google")
                 }
             }
             .buttonStyle(.wbGoogle)
+            .disabled(model.isLoading)
 
             HStack(spacing: Space.s) {
                 Rectangle().fill(.wbBorder).frame(height: 1)
@@ -91,67 +94,6 @@ struct SignInView: View {
         .glass(in: RoundedRectangle(cornerRadius: 32, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(.wbBorder, lineWidth: 1))
         .shadow(color: Color(hex: 0x4379D6).opacity(0.12), radius: 24, y: 10)
-    }
-}
-
-// MARK: - Google account chooser
-
-struct GoogleChooserSheet: View {
-    @Bindable var model: AuthViewModel
-    @Environment(AppState.self) private var appState
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: Space.m) {
-                Text("to continue to WebBlock").font(.subheadline).foregroundStyle(.wbMuted)
-                Button {
-                    Task { await model.signInWithGoogle(appState: appState) }
-                } label: {
-                    HStack(spacing: Space.s) {
-                        AvatarView(initials: "SS", size: 40)
-                        VStack(alignment: .leading) {
-                            Text("Sovannarith Soeun").font(.body.weight(.semibold)).foregroundStyle(.wbText)
-                            Text("sovannarith@gmail.com").font(.footnote).foregroundStyle(.wbMuted)   // SAMPLE account
-                        }
-                        Spacer()
-                        if model.isLoading { ProgressView() }
-                        else { Image(systemName: "chevron.right").font(.footnote.weight(.bold)).foregroundStyle(Color.wbBrand) }
-                    }
-                    .padding(.vertical, Space.s).padding(.horizontal, Space.l)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.wbCard, in: Capsule())
-                    .overlay(Capsule().stroke(Color.wbBrand.opacity(0.45), lineWidth: 1.5))
-                    .shadow(color: Color.wbBrand.opacity(0.15), radius: 10, y: 4)
-                    .contentShape(Capsule())
-                }
-                .buttonStyle(.wbCardPress)
-                .disabled(model.isLoading)
-                if let message = model.errorMessage {
-                    Label(message, systemImage: "exclamationmark.triangle.fill").font(.footnote).foregroundStyle(.wbRed)
-                }
-                Spacer()
-            }
-            .padding(Space.screen)
-            .liquidBackdrop()
-            .navigationTitle("Choose an account")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "chevron.left").font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Color(hex: 0x3F72D0))
-                            .frame(width: 44, height: 44)
-                            .liquidGlass(in: Circle(), tint: .white.opacity(0.6), interactive: true)
-                            .environment(\.colorScheme, .light)
-                            .overlay(Circle().stroke(Color(hex: 0x3F72D0).opacity(0.15), lineWidth: 1))
-                            .contentShape(Circle())
-                    }
-                    .accessibilityLabel("Cancel")
-                }
-                    .hidingSharedBackground()
-            }
-        }
     }
 }
 
@@ -351,7 +293,7 @@ private struct StepHeading: View {
     let subtitle: Text
     var body: some View {
         VStack(spacing: Space.xs) {
-            Text(title).font(.system(size: 26, weight: .bold)).foregroundStyle(.wbText)
+            Text(title).wbFont(26, .bold).foregroundStyle(.wbText)
             subtitle.font(.body).foregroundStyle(.wbMuted).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -459,9 +401,13 @@ private struct CodeStep: View {
 
 private struct BlinkingCaret: View {
     @State private var on = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         Rectangle().fill(Color.wbBrand).frame(width: 2, height: 26).opacity(on ? 1 : 0)
-            .onAppear { withAnimation(.easeInOut(duration: 0.55).repeatForever()) { on.toggle() } }
+            .onAppear {
+                guard !reduceMotion else { return }   // a steady caret with Reduce Motion
+                withAnimation(.easeInOut(duration: 0.55).repeatForever()) { on.toggle() }
+            }
     }
 }
 

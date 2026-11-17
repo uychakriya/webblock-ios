@@ -130,7 +130,8 @@ extension View {
     /// (no translucent system glass that washes the blue out into a soft tint).
     func brandFace<S: Shape>(in shape: S, glow: Bool = true) -> some View {
         self
-            .background(Color.wbBrand, in: shape)
+            // A deeper blue in Dark Mode keeps white labels readable (about 5:1 instead of 2.6:1).
+            .background(Color(light: 0x4379D6, dark: 0x3466C4), in: shape)
             .overlay(shape.stroke(
                 LinearGradient(colors: [.white.opacity(0.55), .white.opacity(0.08), .white.opacity(0.3)],
                                startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1))
@@ -199,13 +200,14 @@ struct HeroBackdrop: View {
 
 private struct Drift: ViewModifier {
     let dx: CGFloat, dy: CGFloat, duration: Double, delay: Double
+    var enabled = true
     @State private var on = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
         content
-            .offset(x: on ? dx : -dx, y: on ? dy : -dy)
+            .offset(x: enabled ? (on ? dx : -dx) : 0, y: enabled ? (on ? dy : -dy) : 0)
             .onAppear {
-                guard !reduceMotion else { return }
+                guard enabled, !reduceMotion else { return }
                 withAnimation(.easeInOut(duration: duration).repeatForever(autoreverses: true).delay(delay)) { on = true }
             }
     }
@@ -215,6 +217,8 @@ private struct Drift: ViewModifier {
 struct FloatingDecor: View {
     /// The big pale circle on the right edge; the intro turns it off because it looked messy there.
     var showCircle = true
+    /// Turn the slow drift off for a completely still version.
+    var animated = true
     @Environment(\.colorScheme) private var scheme
     private var ink: Color { Color.wbBrand.opacity(scheme == .dark ? 0.55 : 1) }
 
@@ -227,20 +231,20 @@ struct FloatingDecor: View {
                         .overlay(Circle().stroke(ink.opacity(0.10), lineWidth: 1))
                         .frame(width: 240)
                         .position(x: w + 30, y: h * 0.62)
-                        .modifier(Drift(dx: 0, dy: 8, duration: 7, delay: 0))
+                        .modifier(Drift(dx: 0, dy: 8, duration: 7, delay: 0, enabled: animated))
                 }
 
                 // concentric rings bleeding off the bottom-left
                 ConcentricRings(ink: ink)
                     .position(x: -10, y: h - 40)
-                    .modifier(Drift(dx: 3, dy: -6, duration: 8, delay: 0.8))
+                    .modifier(Drift(dx: 3, dy: -6, duration: 8, delay: 0.8, enabled: animated))
 
                 // row of four small dots
                 HStack(spacing: 14) {
                     ForEach(0..<4, id: \.self) { _ in Circle().fill(ink.opacity(0.38)).frame(width: 6, height: 6) }
                 }
                 .position(x: w * 0.62, y: h - 70)
-                .modifier(Drift(dx: 8, dy: 2, duration: 5, delay: 0.6))
+                .modifier(Drift(dx: 8, dy: 2, duration: 5, delay: 0.6, enabled: animated))
             }
         }
         .allowsHitTesting(false)
@@ -295,7 +299,7 @@ struct TileBackdrop: View {
             GeometryReader { geo in
                 ZStack(alignment: .top) {
                     LinearGradient(colors: scheme == .dark ? [Color(hex: 0x1A2B52), Color(hex: 0x0B1220)]
-                                                          : [Color(hex: 0xEDF3FD), Color(hex: 0xF1F6FD), Color(hex: 0xFAFCFF)],
+                                                          : [Color(hex: 0xE7EFFC), Color(hex: 0xEEF4FD), Color(hex: 0xF8FBFF)],
                                    startPoint: .top, endPoint: .bottom)
                     Canvas { ctx, size in
                         let cols = Int(size.width / tile) + 2, rows = Int(size.height / tile) + 2
@@ -307,9 +311,9 @@ struct TileBackdrop: View {
                                 let v = Int((h ^ (h >> 16)) % 100)
                                 let fill: (Color, Double)
                                 switch v {
-                                case 0..<9:   fill = (Color(hex: 0xC9DAF6), 0.30)      // deeper
-                                case 9..<20:  fill = (Color(hex: 0xD3E2F8), 0.24)      // slightly deeper
-                                case 20..<30: fill = (.white, 0.30)                    // lighter
+                                case 0..<9:   fill = (Color(hex: 0xC9DAF6), 0.22)      // deeper
+                                case 9..<20:  fill = (Color(hex: 0xD3E2F8), 0.18)      // slightly deeper
+                                case 20..<30: fill = (.white, 0.35)                    // lighter
                                 default: continue
                                 }
                                 ctx.fill(Path(CGRect(x: CGFloat(c) * tile, y: CGFloat(r) * tile, width: tile, height: tile)),
@@ -319,7 +323,7 @@ struct TileBackdrop: View {
                         var grid = Path()
                         for c in 0...cols { grid.move(to: CGPoint(x: CGFloat(c) * tile, y: 0)); grid.addLine(to: CGPoint(x: CGFloat(c) * tile, y: size.height)) }
                         for r in 0...rows { grid.move(to: CGPoint(x: 0, y: CGFloat(r) * tile)); grid.addLine(to: CGPoint(x: size.width, y: CGFloat(r) * tile)) }
-                        ctx.stroke(grid, with: .color(Color(hex: 0xC6D8F5).opacity(scheme == .dark ? 0.08 : 0.24)), lineWidth: 1)
+                        ctx.stroke(grid, with: .color(Color(hex: 0xC6D8F5).opacity(scheme == .dark ? 0.08 : 0.20)), lineWidth: 1)
                     }
                 }
                 .frame(height: geo.size.height * 0.62)
@@ -399,4 +403,43 @@ private struct WhiteCard: ViewModifier {
 extension View {
     /// Solid white card with a hairline border and a soft shadow.
     func whiteCard(cornerRadius: CGFloat = 24) -> some View { modifier(WhiteCard(cornerRadius: cornerRadius)) }
+}
+
+// MARK: - Dynamic Type for fixed design sizes
+
+/// Keeps a design size (e.g. 14pt semibold) but scales it with the owner's text size setting,
+/// relative to the closest system text style.
+private struct ScaledSystemFont: ViewModifier {
+    @ScaledMetric private var size: CGFloat
+    private let weight: Font.Weight
+
+    init(size: CGFloat, weight: Font.Weight) {
+        _size = ScaledMetric(wrappedValue: size, relativeTo: Self.style(for: size))
+        self.weight = weight
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: size, weight: weight))
+    }
+
+    private static func style(for size: CGFloat) -> Font.TextStyle {
+        switch size {
+        case ..<12: .caption2
+        case ..<13: .caption
+        case ..<14: .footnote
+        case ..<16: .subheadline
+        case ..<18: .body
+        case ..<21: .title3
+        case ..<23: .title2
+        case ..<29: .title
+        default: .largeTitle
+        }
+    }
+}
+
+extension View {
+    /// `.font(.system(size:weight:))` that follows Dynamic Type.
+    func wbFont(_ size: CGFloat, _ weight: Font.Weight = .regular) -> some View {
+        modifier(ScaledSystemFont(size: size, weight: weight))
+    }
 }

@@ -56,7 +56,79 @@ private struct Entrance: ViewModifier {
     }
 }
 
+/// Text reveal for the active page: fades in, rises and sharpens from a light blur, staggered by `delay`.
+/// With Reduce Motion it only fades.
+private struct Reveal: ViewModifier {
+    let shown: Bool
+    let delay: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content        // no motion: text is simply there
+    }
+}
+
+/// A single light sweep across the call-to-action when it changes to "Get started". Never hit-tested.
+private struct Sheen: View {
+    let trigger: Bool
+    @State private var position: CGFloat = -0.5
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        GeometryReader { geo in
+            LinearGradient(colors: [.clear, .white.opacity(0.38), .clear], startPoint: .leading, endPoint: .trailing)
+                .frame(width: geo.size.width * 0.35)
+                .rotationEffect(.degrees(12))
+                .offset(x: position * geo.size.width)
+        }
+        .mask(Capsule())
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onChange(of: trigger) { _, now in
+            guard now, !reduceMotion else { return }
+            position = -0.5
+            withAnimation(.easeInOut(duration: 0.9).delay(0.2)) { position = 1.1 }
+        }
+    }
+}
+
+/// The 3D stage for a page's illustration, timed like a camera move in a product film: it arrives from depth
+/// (tilted back, small, out of focus), lands in a gentle three-quarter view over a soft ground shadow, then drifts
+/// very slowly while its page is on screen. When the intro ends it pushes toward the viewer and fades.
+/// The drift pauses when the page is not showing or the app is in the background. Reduce Motion: fades only.
+private struct HeroStage: ViewModifier {
+    let active: Bool
+    let exiting: Bool
+    @State private var arrived = false
+    @State private var drift = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+
+    func body(content: Content) -> some View {
+        content        // no arrival, drift or exit motion
+    }
+}
+
 private extension View {
+    func heroStage(active: Bool, exiting: Bool) -> some View {
+        modifier(HeroStage(active: active, exiting: exiting))
+    }
+
+    /// Layered parallax while pages are swiped: the layer lags (or leads) the page by `shift` of its width
+    /// and turns in perspective by up to `turn` degrees. Driven by geometry, so it follows the finger exactly.
+    func swipeParallax(pageWidth: CGFloat, shift: CGFloat, turn: Double = 0, enabled: Bool) -> some View {
+        visualEffect { content, proxy in
+            let progress = enabled && pageWidth > 0 ? (proxy.frame(in: .global).midX - pageWidth / 2) / pageWidth : 0
+            return content
+                .offset(x: -progress * pageWidth * shift)
+                .rotation3DEffect(.degrees(Double(progress) * -turn), axis: (x: 0, y: 1, z: 0), perspective: 0.5)
+        }
+    }
+
+    func reveal(_ shown: Bool, delay: Double = 0) -> some View {
+        modifier(Reveal(shown: shown, delay: delay))
+    }
+
     func entrance(_ active: Bool, delay: Double = 0, x: CGFloat = 0, y: CGFloat = 40) -> some View {
         modifier(Entrance(active: active, delay: delay, x: x, y: y))
     }
@@ -65,7 +137,10 @@ private extension View {
 // MARK: - Animated backdrop (the website's airy white-blue canvas with a dot grid)
 
 private struct OnboardingBackdrop: View {
+    var page = 0
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var breathe = false
 
     var body: some View {
         ZStack {
@@ -85,9 +160,33 @@ private struct OnboardingBackdrop: View {
                 }
             }
             .mask(LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .init(x: 0.5, y: 0.7)))
-            FloatingDecor(showCircle: false)
+            FloatingDecor(showCircle: false, animated: false)
+            ambientGlow
         }
         .ignoresSafeArea()
+    }
+
+    /// Two soft glows: they glide across as the pages change and breathe very slowly.
+    private var ambientGlow: some View {
+        GeometryReader { geo in
+            let w = geo.size.width, h = geo.size.height
+            let step = CGFloat(page)
+            ZStack {
+                Circle()
+                    .fill(RadialGradient(colors: [Color.wbBrand.opacity(scheme == .dark ? 0.22 : 0.13), .clear],
+                                         center: .center, startRadius: 0, endRadius: w * 0.55))
+                    .frame(width: w * 1.1, height: w * 1.1)
+                    .scaleEffect(breathe ? 1.06 : 0.95)
+                    .position(x: w * (0.12 + 0.25 * step), y: h * 0.30)
+                Circle()
+                    .fill(RadialGradient(colors: [Color(hex: 0x8B5CF6).opacity(scheme == .dark ? 0.14 : 0.08), .clear],
+                                         center: .center, startRadius: 0, endRadius: w * 0.45))
+                    .frame(width: w * 0.9, height: w * 0.9)
+                    .scaleEffect(breathe ? 0.96 : 1.05)
+                    .position(x: w * (0.92 - 0.22 * step), y: h * 0.66)
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -247,6 +346,7 @@ private struct WebsiteIllustration: View {
             HStack(spacing: 6) {
                 Circle().fill(Color.wbGreen).frame(width: 8, height: 8)
                     .overlay(Circle().stroke(Color.wbGreen.opacity(0.5), lineWidth: 2).scaleEffect(pulse ? 2.2 : 1).opacity(pulse ? 0 : 1))
+                    
                 Text("Live").font(.caption.weight(.bold)).foregroundStyle(.wbText)
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
@@ -523,9 +623,8 @@ private struct MonitorIllustration: View {
 struct OnboardingView: View {
     let finish: () -> Void
     @State private var page = 0
-    @State private var showSplash = true      // centered logo first, then it glides to the corner
-    @State private var logoIn = false
-    @Namespace private var logoSpace
+    private let showSplash = false
+    @State private var exiting = false         // the camera push when the intro ends
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private struct Page: Identifiable {
@@ -551,7 +650,7 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            OnboardingBackdrop()
+            OnboardingBackdrop(page: page)
 
             VStack(spacing: 0) {
                 HStack {
@@ -559,11 +658,10 @@ struct OnboardingView: View {
                         Color.clear.frame(width: 48, height: 48)
                     } else {
                         BrandLogo(height: 38)
-                            .matchedGeometryEffect(id: "logo", in: logoSpace)
                             .accessibilityLabel("WebBlocks")
                     }
                     Spacer()
-                    Button("Skip", action: finish)
+                    Button("Skip", action: leave)
                         .font(.subheadline.weight(.semibold)).foregroundStyle(.wbMuted)
                         .opacity(isLast ? 0 : 1)
                         .accessibilityHidden(isLast)
@@ -581,23 +679,31 @@ struct OnboardingView: View {
                         VStack(spacing: Space.l) {
                             Spacer(minLength: 0)
                             illustration(for: item.id)
-                                .frame(height: 340)
+                                .heroStage(active: page == item.id && !showSplash, exiting: exiting)
+                                                                .frame(height: 340)
                                 .scaleEffect(artScale)
                                 .frame(height: artHeight)
                                 .accessibilityHidden(true)
+                            let shown = page == item.id && !showSplash
                             VStack(spacing: Space.xs) {
-                                Text(item.eyebrow).font(.subheadline.weight(.semibold)).foregroundStyle(.wbBrand)
+                                Text(item.eyebrow.uppercased())
+                                    .font(.footnote.weight(.semibold)).tracking(1.2)
+                                    .foregroundStyle(.wbBrand)
+                                    .reveal(shown, delay: 0.2)
                                 (Text(item.title).foregroundStyle(Color.wbText) + Text(item.accent).foregroundStyle(Color.wbBrand))
-                                    .font(.system(size: 28, weight: .bold))
+                                    .wbFont(28, .bold)
                                     .minimumScaleFactor(0.85)
                                     .multilineTextAlignment(.center)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .reveal(shown, delay: 0.3)
                                 Text(item.message).font(.body).foregroundStyle(.wbMuted)
                                     .multilineTextAlignment(.center)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .padding(.top, Space.xxs)
+                                    .reveal(shown, delay: 0.4)
                             }
                             .padding(.horizontal, Space.l)
-                            .opacity(page == item.id ? 1 : 0)
-                            .offset(y: page == item.id ? 0 : 14)
-                            .animation(.easeOut(duration: 0.2), value: page)
+                                                        .accessibilityElement(children: .combine)
                             Spacer(minLength: 0)
                         }
                         .tag(item.id)
@@ -612,39 +718,35 @@ struct OnboardingView: View {
                             .frame(width: item.id == page ? 26 : 8, height: 8)
                     }
                 }
-                .animation(.spring(response: 0.4, dampingFraction: 0.75), value: page)
                 .padding(.bottom, Space.l)
                 .accessibilityHidden(true)
 
-                Button(isLast ? "Get started" : "Next") {
-                    if isLast { finish() } else { withAnimation(.easeInOut(duration: 0.25)) { page += 1 } }
+                Button {
+                    if isLast { leave() } else { page += 1 }
+                } label: {
+                    HStack(spacing: Space.xs) {
+                        Text(isLast ? "Get started" : "Next")
+                        if isLast {
+                            Image(systemName: "arrow.right").font(.body.weight(.bold))
+                        }
+                    }
                 }
-                .buttonStyle(.wbPrimary)
+                .buttonStyle(.wbPrimaryField)         // 50 pt: a comfortable touch target for the main action
                 .disabled(false)                      // never inherit a disabled state from a parent
                 .contentShape(Capsule())
+                .opacity(showSplash ? 0 : 1)
                 .padding(.horizontal, Space.screen).padding(.bottom, Space.m)
                 .zIndex(1)                            // keep the button above the paging view
             }
-            .opacity(showSplash ? 0 : 1)
-            .allowsHitTesting(!showSplash)
-
-            // Splash: big logo springs in at the centre, holds, then flies to the top-left corner.
-            if showSplash {
-                BrandLogo(height: 84)
-                    .matchedGeometryEffect(id: "logo", in: logoSpace)
-                    .scaleEffect(logoIn ? 1 : 0.6)
-                    .opacity(logoIn ? 1 : 0)
-                    .accessibilityLabel("WebBlocks")
-            }
+            .opacity(showSplash || exiting ? 0 : 1)
+            .allowsHitTesting(!showSplash && !exiting)
         }
-        .task {
-            if reduceMotion { logoIn = true } else {
-                withAnimation(.spring(response: 0.7, dampingFraction: 0.7)) { logoIn = true }
-            }
-            try? await Task.sleep(for: .seconds(reduceMotion ? 0.6 : 1.5))
-            withAnimation(.spring(response: 0.7, dampingFraction: 0.85)) { showSplash = false }
-        }
+        .sensoryFeedback(.selection, trigger: page)
+        .sensoryFeedback(.impact(weight: .medium), trigger: exiting)
     }
+
+    /// Ends the intro and hands over to the existing first-launch flow.
+    private func leave() { finish() }
 
     @ViewBuilder
     private func illustration(for id: Int) -> some View {

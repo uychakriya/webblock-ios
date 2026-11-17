@@ -12,13 +12,15 @@ struct RootView: View {
                     .transition(.opacity)
             } else if !hasSeenOnboarding {
                 OnboardingView { hasSeenOnboarding = true }
-                    .transition(.opacity)
+                    // Leaves with a gentle lift and fade into sign-in.
+                    .transition(.asymmetric(insertion: .opacity,
+                                            removal: .opacity.combined(with: .scale(scale: 1.04))))
             } else {
                 SignInView()
                     .transition(.opacity)
             }
         }
         .animation(.easeInOut(duration: 0.15), value: appState.isSignedIn)
-        .animation(.easeInOut(duration: 0.15), value: hasSeenOnboarding)
+        .animation(.easeInOut(duration: 0.35), value: hasSeenOnboarding)
     }
 }

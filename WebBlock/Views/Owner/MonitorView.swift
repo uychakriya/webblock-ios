@@ -13,6 +13,7 @@ struct MonitorView: View {
     @Environment(HomeViewModel.self) private var home
     @State private var expandedDeploy: Int?
     @State private var showAllDeploys = false
+    @State private var showAllActivity = false
     @State private var expandedActivity: UUID?
     @State private var page: MonitorPage = .overview
 
@@ -167,22 +168,43 @@ struct MonitorView: View {
 
     // MARK: Activity log (Pro / Ultra)
 
+    /// Same pattern as Recent deploys: the latest four, then "Show all".
     private func activityLog(_ s: MonitorSnapshot) -> some View {
+        let limit = 4
         let items = s.activity
+        let rows = showAllActivity ? items : Array(items.prefix(limit))
         return VStack(alignment: .leading, spacing: Space.s) {
-            SectionTitle(text: "Recent activity log")
+            HStack {
+                Text("Recent activity").font(.headline).foregroundStyle(.wbText)
+                Spacer()
+                if !items.isEmpty { Text("Tap for details").font(.caption).foregroundStyle(.wbMuted) }
+            }
             VStack(spacing: 0) {
                 if items.isEmpty {
-                    Text("No activity of this type yet.").font(.subheadline).foregroundStyle(.wbMuted)
+                    Text("No activity yet.").font(.subheadline).foregroundStyle(.wbMuted)
                         .frame(maxWidth: .infinity).padding(.vertical, Space.l)
                 }
-                ForEach(items) { item in
+                ForEach(rows) { item in
                     activityRow(item)
-                    if item.id != items.last?.id { Divider().padding(.leading, 58) }
+                    if item.id != rows.last?.id { Divider().padding(.leading, 58) }
                 }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
-            .wbCard(padding: 0)
+            if items.count > limit {
+                Button {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { showAllActivity.toggle() }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(showAllActivity ? "Show less" : "Show all \(items.count) activities")
+                        Image(systemName: "chevron.down").rotationEffect(.degrees(showAllActivity ? 180 : 0))
+                    }
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(Color.wbBrand)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+                }
+                .buttonStyle(.wbCardPress)
+            }
         }
+        .wbCard()
     }
 
     /// Compact row: icon, title, short date. Tap to drop down the type, status and any error.
@@ -231,7 +253,8 @@ struct MonitorView: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .background(open ? Color.wbBrandSoft.opacity(0.35) : Color.clear)
+        .background(open ? Color.wbBrandSoft.opacity(0.35) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .accessibilityElement(children: .contain)
         .accessibilityValue(open ? "Expanded" : "Collapsed")
     }
@@ -566,6 +589,7 @@ private struct SmoothLine: Shape {
 private struct StatusCard: View {
     let snapshot: MonitorSnapshot
     @State private var pulse = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var drawn: CGFloat = 0
     @Environment(\.openURL) private var openURL
 
@@ -595,7 +619,7 @@ private struct StatusCard: View {
                 Button {
                     if let url = URL(string: "https://\(snapshot.websiteURL)") { openURL(url) }
                 } label: {
-                    HStack(spacing: 3) { Text("Visit site"); Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .bold)) }
+                    HStack(spacing: 3) { Text("Visit site"); Image(systemName: "arrow.up.right").wbFont(10, .bold) }
                         .font(.footnote.weight(.semibold)).foregroundStyle(Color.wbBrand)
                 }
                 .buttonStyle(.wbCardPress)
@@ -610,7 +634,9 @@ private struct StatusCard: View {
         .clipShape(shape)
         .overlay(shape.stroke(Color.wbBrand.opacity(0.15), lineWidth: 1))
         .onAppear {
-            withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: false)) { pulse = true }
+            if !reduceMotion {   // the live dot stays still with Reduce Motion
+                withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: false)) { pulse = true }
+            }
             withAnimation(.easeOut(duration: 1.2).delay(0.3)) { drawn = 1 }
         }
     }
@@ -624,18 +650,36 @@ private struct StatusCard: View {
                 Image(systemName: online ? "globe" : "wifi.slash").font(.title2).foregroundStyle(online ? Color.wbBrand : Color.wbRed)
             }
             .frame(width: 70, height: 70)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(online ? "Your website is online" : "Your website is offline")
-                    .font(.headline).foregroundStyle(.wbText)
-                Text("Last deploy \(snapshot.lastDeployText)").font(.subheadline).foregroundStyle(.wbMuted)
-                Text(snapshot.lastDeployDetail).font(.caption).foregroundStyle(.wbMuted)
+            // The badge sits beside the text when it fits, and under it on narrow phones.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Space.s) {
+                    statusText.fixedSize(horizontal: true, vertical: false)
+                    Spacer(minLength: 0)
+                    statusBadge
+                }
+                VStack(alignment: .leading, spacing: Space.xs) {
+                    statusText
+                    statusBadge
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Spacer(minLength: 0)
-            Text(online ? "LIVE" : "OFFLINE").font(.caption2.weight(.bold)).foregroundStyle(tint)
-                .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(Color.wbCard.opacity(0.7), in: Capsule())
-                .overlay(Capsule().stroke(tint.opacity(0.35), lineWidth: 1))
         }
+    }
+
+    private var statusText: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(online ? "Your website is online" : "Your website is offline")
+                .font(.headline).foregroundStyle(.wbText)
+            Text("Last deploy \(snapshot.lastDeployText)").font(.subheadline).foregroundStyle(.wbMuted)
+            Text(snapshot.lastDeployDetail).font(.caption).foregroundStyle(.wbMuted)
+        }
+    }
+
+    private var statusBadge: some View {
+        Text(online ? "LIVE" : "OFFLINE").font(.caption2.weight(.bold)).foregroundStyle(tint)
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(Color.wbCard.opacity(0.7), in: Capsule())
+            .overlay(Capsule().stroke(tint.opacity(0.35), lineWidth: 1))
     }
 
     private var chart: some View {

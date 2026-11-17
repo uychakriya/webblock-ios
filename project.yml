@@ -25,3 +25,30 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         TARGETED_DEVICE_FAMILY: "1"
+  WebBlockUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITestsTemp]
+    dependencies:
+      - target: WebBlock
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.webblock.app.uitests
+        TEST_TARGET_NAME: WebBlock
+schemes:
+  WebBlock:
+    build:
+      targets:
+        WebBlock: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+  WebBlockUITestsTemp:
+    build:
+      targets:
+        WebBlock: all
+        WebBlockUITests: [test]
+    test:
+      targets: [WebBlockUITests]

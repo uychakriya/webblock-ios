@@ -97,21 +97,33 @@ struct WebsiteListView: View {
         appState.user?.fullName.split(separator: " ").first.map(String.init) ?? ""
     }
 
+    private var workspaceChip: some View {
+        Label("Your Workspace", systemImage: "sparkles")
+            .wbFont(12, .semibold).foregroundStyle(.white)
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(Color.white.opacity(0.18), in: Capsule())
+    }
+
     /// "Welcome back" card on the blue header: workspace chip and live-website count on top, then the greeting.
     private var welcomeCard: some View {
         VStack(alignment: .leading, spacing: Space.s) {
-            HStack(alignment: .center) {
-                Label("Your Workspace", systemImage: "sparkles")
-                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
-                    .padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(Color.white.opacity(0.18), in: Capsule())
-                Spacer(minLength: Space.xs)
-                liveCount
+            // Chip and live count share a row when they fit; with large text they stack.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center) {
+                    workspaceChip.fixedSize()
+                    Spacer(minLength: Space.xs)
+                    liveCount
+                }
+                VStack(alignment: .leading, spacing: Space.xs) {
+                    workspaceChip
+                    liveCount
+                }
             }
-            Text("Welcome back, \(firstName)!").font(.system(size: 24, weight: .bold)).foregroundStyle(.white)
+            Text("Welcome back, \(firstName)!").wbFont(24, .bold).foregroundStyle(.white)
                 .minimumScaleFactor(0.8).lineLimit(2)
             Text("Choose a website to manage its products, business information and monitor.")
                 .font(.subheadline).foregroundStyle(.white.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(Space.m)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -125,11 +137,11 @@ struct WebsiteListView: View {
     /// Small "4 Live websites" badge at the top right of the welcome card.
     private var liveCount: some View {
         HStack(spacing: 8) {
-            Image(systemName: "globe").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+            Image(systemName: "globe").wbFont(12, .semibold).foregroundStyle(.white)
                 .frame(width: 26, height: 26)
                 .background(LinearGradient(colors: [Color(hex: 0x6C9BEA), Color(hex: 0x3F72D0)], startPoint: .top, endPoint: .bottom), in: Circle())
-            Text("\(home.liveSites.count)").font(.system(size: 16, weight: .bold)).foregroundStyle(.wbText)
-            Text("Live").font(.system(size: 12)).foregroundStyle(.wbMuted)
+            Text("\(home.liveSites.count)").wbFont(16, .bold).foregroundStyle(.wbText)
+            Text("Live").wbFont(12).foregroundStyle(.wbMuted)
         }
         .padding(.leading, 5).padding(.trailing, 12).padding(.vertical, 5)
         .background(Color.wbCard, in: Capsule())
@@ -140,27 +152,22 @@ struct WebsiteListView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
+            // The header and the welcome card stay put; only the list of websites scrolls underneath.
+            VStack(alignment: .leading, spacing: Space.l) {
                 VStack(alignment: .leading, spacing: Space.l) {
                     // Header: your full logo on the left, bell + profile on the right.
                     HStack(alignment: .center) {
-                        // Full logo straight on the white background, no card behind it.
                         BrandLogo(height: 44)
                         Spacer()
-                        // Bell and profile as two separate white circles, no shared pill behind them.
                         AccountButtons()
                     }
                     .padding(.top, Space.xs)
                     welcomeCard
+                }
+                .padding(.horizontal, Space.screen).padding(.top, Space.xs)
 
+                ScrollView {
                     VStack(alignment: .leading, spacing: Space.s) {
-                        HStack {
-                            Text("Live Websites").font(.subheadline.weight(.semibold)).foregroundStyle(.wbMuted)
-                            Spacer()
-                            Text("\(home.liveSites.count)").font(.caption.weight(.bold)).foregroundStyle(.wbBrand)
-                                .padding(.horizontal, 8).padding(.vertical, 2)
-                                .background(.wbBrandSoft, in: Capsule())
-                        }
                         LazyVStack(spacing: Space.m) {
                             ForEach(Array(home.liveSites.enumerated()), id: \.element.id) { index, site in
                                 WebsiteCard(site: site, open: { tab in home.select(site); home.selectedTab = tab })
@@ -168,13 +175,14 @@ struct WebsiteListView: View {
                             }
                         }
                     }
+                    .padding(.horizontal, Space.screen).padding(.top, Space.xs).padding(.bottom, Space.l)
                 }
-                .padding(.horizontal, Space.screen).padding(.top, Space.xs).padding(.bottom, Space.l)
+                .scrollIndicators(.hidden)
+                .refreshable { await home.load() }
             }
             .background { TileBackdrop() }
             .navigationTitle("Your websites")
             .portalToolbar(hero: true)
-            .refreshable { await home.load() }
         }
     }
 }
@@ -206,6 +214,7 @@ struct WebsiteLogo: View {
 
 /// One live website: logo, name and type, its address, and shortcuts into each portal tab.
 struct WebsiteCard: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let site: Website
     let open: (PortalTab) -> Void
     @State private var opening = false
@@ -229,13 +238,19 @@ struct WebsiteCard: View {
                     HStack(spacing: Space.s) {
                         WebsiteLogo(site: site, size: 52)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(site.name).font(.headline).foregroundStyle(.wbText).lineLimit(1)
+                            Text(site.name).font(.headline).foregroundStyle(.wbText).lineLimit(2)
                             Text(site.businessType).font(.subheadline).foregroundStyle(.wbMuted).lineLimit(1)
+                            if typeSize.isAccessibilitySize {
+                                Pill(text: "Live", symbol: "circle.fill", tint: .wbGreen, background: .wbGreenSoft)
+                            }
                         }
+                        .layoutPriority(1)
                         Spacer(minLength: Space.xs)
-                        Pill(text: "Live", symbol: "circle.fill", tint: .wbGreen, background: .wbGreenSoft)
+                        if !typeSize.isAccessibilitySize {
+                            Pill(text: "Live", symbol: "circle.fill", tint: .wbGreen, background: .wbGreenSoft)
+                        }
                         Image(systemName: "arrow.right")
-                            .font(.system(size: 14, weight: .bold))
+                            .wbFont(14, .bold)
                             .foregroundStyle(opening ? Color.white : Color.wbBrand)
                             .frame(width: 36, height: 36)
                             .background(opening ? Color.wbBrand : Color.wbCard, in: Circle())
@@ -276,7 +291,7 @@ struct WebsiteCard: View {
     private func shortcut(_ symbol: String, _ title: String, _ tab: PortalTab) -> some View {
         Button { open(tab) } label: {
             VStack(spacing: 4) {
-                Image(systemName: symbol).font(.system(size: 16, weight: .semibold))
+                Image(systemName: symbol).wbFont(16, .semibold)
                 Text(title).font(.caption.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.8)
             }
             .foregroundStyle(.wbBrand)
@@ -306,7 +321,7 @@ struct NoLiveWebsiteView: View {
     }
 }
 
-// MARK: - Site card (Figma: "PS · Petal & Stem · petalandstem.webblock.com")
+// MARK: - Site card (current website + switcher), shared by the three portal tabs
 
 struct SiteHeaderCard: View {
     @Environment(HomeViewModel.self) private var home
@@ -317,7 +332,7 @@ struct SiteHeaderCard: View {
         if let site = home.selected {
             let others = home.liveSites.filter { $0.id != site.id }
             let multiple = !others.isEmpty
-            let shape = RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+            let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
             VStack(spacing: 0) {
                 // Current website
                 Button {
@@ -325,19 +340,28 @@ struct SiteHeaderCard: View {
                     withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { expanded.toggle() }
                 } label: {
                     HStack(spacing: Space.s) {
-                        WebsiteLogo(site: site, size: 52)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(site.name).font(.system(size: 18, weight: .bold)).foregroundStyle(.wbText).lineLimit(1)
-                            Text(site.url ?? "").font(.subheadline).foregroundStyle(.wbMuted)
-                                .lineLimit(1).truncationMode(.tail)
+                        WebsiteLogo(site: site, size: 44)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(site.name).font(.headline).foregroundStyle(.wbText).lineLimit(2)
+                            // Live status and address on one quiet line.
+                            HStack(spacing: 6) {
+                                Circle().fill(Color.wbGreen).frame(width: 7, height: 7)
+                                Text("Live").font(.footnote.weight(.semibold)).foregroundStyle(Color.wbGreen)
+                                    .fixedSize()
+                                if let url = site.url, !url.isEmpty {
+                                    Text("·").font(.footnote).foregroundStyle(.wbMuted)
+                                    Text(url).font(.footnote).foregroundStyle(.wbMuted)
+                                        .lineLimit(1).truncationMode(.middle)
+                                }
+                            }
                         }
+                        .layoutPriority(1)
                         Spacer(minLength: Space.xs)
-                        liveDot
                         if multiple {
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 14, weight: .semibold)).foregroundStyle(.wbMuted)
-                                .rotationEffect(.degrees(expanded ? 180 : 0))
-                                .frame(width: 24, height: 30)
+                            Image(systemName: expanded ? "chevron.up" : "chevron.up.chevron.down")
+                                .font(.footnote.weight(.semibold)).foregroundStyle(.wbBrand)
+                                .frame(width: 32, height: 32)
+                                .background(Color.wbBrand.opacity(expanded ? 0.16 : 0.08), in: Circle())
                         }
                     }
                     .padding(Space.s)
@@ -347,76 +371,55 @@ struct SiteHeaderCard: View {
                 .accessibilityLabel(multiple ? "Website: \(site.name), live. Switch website" : "Website: \(site.name), live")
                 .accessibilityValue(multiple ? (expanded ? "Expanded" : "Collapsed") : "")
 
-                // Other websites to switch to
+                // All websites: the current one is highlighted and ticked, the others switch on tap
                 if expanded && multiple {
-                    VStack(alignment: .leading, spacing: Space.xs) {
-                        Text("SWITCH TO").font(.caption2.weight(.semibold)).tracking(0.6).foregroundStyle(.wbMuted)
-                            .padding(.leading, 4)
-                        VStack(spacing: 0) {
-                            ForEach(Array(others.enumerated()), id: \.element.id) { index, option in
-                                if index > 0 { Divider().padding(.leading, 56) }
-                                row(option)
-                            }
+                    Divider().padding(.horizontal, Space.s)
+                    VStack(spacing: Space.xs) {
+                        ForEach(home.liveSites) { option in
+                            row(option, current: option.id == site.id)
                         }
-                        .background(Color(hex: 0xF4F7FD), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
-                    .padding(.horizontal, Space.s).padding(.bottom, Space.s)
+                    .padding(Space.s)
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
             .clipShape(shape)
-            .whiteCard(cornerRadius: Radius.card)
+            .whiteCard(cornerRadius: 20)          // same shape as the product cards
+            .overlay(shape.strokeBorder(Color.wbBrand.opacity(0.35), lineWidth: 1.2))   // soft blue border
             .animation(.easeInOut(duration: 0.2), value: expanded)
         }
     }
 
-    /// Small green "Live" dot next to the website name.
-    private var liveDot: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "globe").font(.system(size: 12, weight: .semibold))
-            Text("Live").font(.subheadline.weight(.semibold))
-        }
-        .foregroundStyle(Color.wbGreen)
-        .padding(.horizontal, 11).padding(.vertical, 6)
-        .background(Color.wbGreenSoft, in: Capsule())
-        .overlay(Capsule().strokeBorder(Color.wbGreen.opacity(0.18), lineWidth: 1))
-    }
-
-    /// One other website in the open list. Switching keeps you on the same tab.
-    private func row(_ option: Website) -> some View {
-        let lit = switchingID == option.id
+    /// One website in the open list. Switching keeps you on the same tab; the current one just closes the list.
+    private func row(_ option: Website, current: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
         return Button {
             guard switchingID == nil else { return }
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.65)) { switchingID = option.id }
-            Task {
-                try? await Task.sleep(for: .milliseconds(320))
-                withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { expanded = false }
-                home.open(websiteID: option.id, tab: home.selectedTab)
-                switchingID = nil
-            }
+            if current { withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { expanded = false }; return }
+            switchingID = option.id
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { expanded = false }
+            home.open(websiteID: option.id, tab: home.selectedTab)
+            switchingID = nil
         } label: {
             HStack(spacing: Space.s) {
-                WebsiteLogo(site: option, size: 34)
-                VStack(alignment: .leading, spacing: 1) {
+                WebsiteLogo(site: option, size: 40)
+                VStack(alignment: .leading, spacing: 2) {
                     Text(option.name).font(.subheadline.weight(.semibold)).foregroundStyle(.wbText).lineLimit(1)
-                    Text(option.url ?? "").font(.caption).foregroundStyle(.wbMuted).lineLimit(1)
+                    Text(option.url ?? "").font(.footnote).foregroundStyle(.wbMuted).lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "arrow.right").font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(lit ? Color.white : Color.wbBrand)
-                    .frame(width: 30, height: 30)
-                    .background(lit ? Color.wbBrand : Color.wbCard, in: Circle())
-                    .overlay(Circle().strokeBorder(Color.wbBrand.opacity(0.12), lineWidth: 1))
-                    .shadow(color: Color.wbBrand.opacity(lit ? 0.35 : 0), radius: 6, y: 2)
-                    .scaleEffect(lit ? 1.12 : 1)
-                    .offset(x: lit ? 3 : 0)
+                if current {
+                    Image(systemName: "checkmark").wbFont(15, .semibold).foregroundStyle(Color.wbBrand)
+                }
             }
             .padding(.horizontal, Space.s).padding(.vertical, 10)
-            .background(lit ? Color.wbBrand.opacity(0.10) : .clear)
-            .contentShape(Rectangle())
+            .background(current ? Color.wbBrand.opacity(0.10) : Color.wbCard, in: shape)
+            .overlay(shape.strokeBorder(Color.wbBrand.opacity(current ? 0 : 0.08), lineWidth: 1))
+            .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Switch to \(option.name)")
+        .accessibilityLabel(current ? "\(option.name), current website" : "Switch to \(option.name)")
+        .accessibilityAddTraits(current ? .isSelected : [])
     }
 }
 
@@ -521,7 +524,7 @@ struct AccountButtons: View {
                         let count = appState.notifications.unreadCount
                         if count > 0 {
                             Text(count > 99 ? "99+" : "\(count)")
-                                .font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                                .wbFont(11, .bold).foregroundStyle(.white)
                                 .padding(.horizontal, 5).frame(minWidth: 18, minHeight: 18)
                                 .background(Color.wbRed, in: Capsule())
                                 .overlay(Capsule().stroke(.white, lineWidth: 1.5))
@@ -534,7 +537,7 @@ struct AccountButtons: View {
             .accessibilityLabel("Notifications, \(appState.notifications.unreadCount) unread")
 
             Button { showAccountMenu = true } label: {
-                Text(appState.user?.initials ?? "?").font(.system(size: 14, weight: .bold))
+                Text(appState.user?.initials ?? "?").wbFont(14, .bold)
                     .foregroundStyle(Color(hex: 0x3F72D0))
                     .frame(width: 36, height: 36)
                     .background(Color(hex: 0xE6EEFB), in: Circle())
@@ -548,12 +551,12 @@ struct AccountButtons: View {
                     HStack(spacing: Space.s) {
                         AvatarView(initials: appState.user?.initials ?? "?", size: 40)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(appState.user?.fullName ?? "").font(.system(size: 14, weight: .semibold))
+                            Text(appState.user?.fullName ?? "").wbFont(14, .semibold)
                                 .foregroundStyle(.wbText).lineLimit(1)
-                            Text(appState.user?.email ?? "").font(.system(size: 11))
+                            Text(appState.user?.email ?? "").wbFont(11)
                                 .foregroundStyle(.wbMuted).lineLimit(1)
                             if let plan = appState.user?.plan {
-                                Text(plan.title).font(.system(size: 10, weight: .bold)).foregroundStyle(.wbBrand)
+                                Text(plan.title).wbFont(10, .bold).foregroundStyle(.wbBrand)
                                     .padding(.horizontal, 8).padding(.vertical, 2)
                                     .background(Color.wbBrandSoft, in: Capsule())
                                     .padding(.top, 2)
@@ -565,7 +568,7 @@ struct AccountButtons: View {
                     Divider()
 
                     VStack(spacing: 2) {
-                        accountRow("Replay intro", symbol: "play", tint: .wbText) {
+                        accountRow("Replay intro", symbol: "play.fill", tint: .wbText, iconTint: .wbBrand) {
                             showAccountMenu = false
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { showIntro = true }
                         }
@@ -596,15 +599,19 @@ struct AccountButtons: View {
         }
     }
 
-    /// A row like the iOS system menu: title on the left, plain SF Symbol on the right, no tile behind it.
-    private func accountRow(_ title: String, symbol: String, tint: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Text(title).font(.system(size: 16)).foregroundStyle(tint)
+    /// A menu row: a soft tinted circle with the icon on the left, then the title.
+    private func accountRow(_ title: String, symbol: String, tint: Color, iconTint: Color? = nil, action: @escaping () -> Void) -> some View {
+        let iconTint = iconTint ?? tint
+        return Button(action: action) {
+            HStack(spacing: 12) {
+                // Same-size soft circle for every row, so the icons line up in one column.
+                Image(systemName: symbol).wbFont(11, .semibold).foregroundStyle(iconTint)
+                    .frame(width: 30, height: 30)
+                    .background(iconTint.opacity(0.12), in: Circle())
+                Text(title).wbFont(16).foregroundStyle(tint)
                 Spacer(minLength: 0)
-                Image(systemName: symbol).font(.system(size: 17)).foregroundStyle(tint)
             }
-            .padding(.horizontal, Space.s).frame(height: 44)
+            .padding(.horizontal, Space.xs).frame(height: 48)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -643,7 +650,7 @@ struct NotificationAvatar: View {
             if let logo = item.logoAsset {
                 Image(logo).resizable().scaledToFill()
             } else if item.isFromWebBlock {
-                Image(systemName: "bell.fill").font(.system(size: 18, weight: .semibold)).foregroundStyle(.white)
+                Image(systemName: "bell.fill").wbFont(18, .semibold).foregroundStyle(.white)
                     .frame(width: size, height: size)
                     .background(LinearGradient(colors: [Color(hex: 0x4F86DD), Color(hex: 0x3A6CCB)], startPoint: .topLeading, endPoint: .bottomTrailing))
             } else {
@@ -676,6 +683,12 @@ struct NotificationsSheet: View {
     var body: some View {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
+                // Pinned header: the title and the All / Unread switch stay put while the list scrolls.
+                Text("Notifications")
+                    .font(.system(size: 26, weight: .bold)).foregroundStyle(.wbBrand)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Space.screen).padding(.top, Space.xxs)
+                    .accessibilityAddTraits(.isHeader)
                 WBSegmented(options: [("All", false), ("Unread \(model.unreadCount)", true)],
                             selection: $model.showUnreadOnly)
                     .padding(Space.screen)
@@ -723,8 +736,7 @@ struct NotificationsSheet: View {
                 }
             }
             .liquidBackdrop()
-            .navigationTitle("Notifications")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: UUID.self) { id in
                 if let item = model.items.first(where: { $0.id == id }) {
                     NotificationDetailView(item: item) { open(item) }
@@ -847,7 +859,7 @@ struct NotificationDetailView: View {
     private func activityRow(_ symbol: String, tint: Color, soft: Color, title: String, subtitle: String, line: Bool) -> some View {
         HStack(alignment: .top, spacing: Space.s) {
             VStack(spacing: 0) {
-                Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(tint)
+                Image(systemName: symbol).wbFont(14, .semibold).foregroundStyle(tint)
                     .frame(width: 40, height: 40).background(soft, in: Circle())
                 if line { Rectangle().fill(Color.wbBorder).frame(width: 2, height: 18) }
             }

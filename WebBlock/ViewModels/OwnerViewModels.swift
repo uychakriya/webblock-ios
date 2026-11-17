@@ -21,14 +21,32 @@ struct ProductDraft: Identifiable, Hashable {
     }
 
     var price: Decimal? { Decimal(string: priceText.replacingOccurrences(of: ",", with: ".")) }
-    var nameError: String? { name.trimmingCharacters(in: .whitespaces).isEmpty ? "Enter a product name." : nil }
+    /// The server's limits for products (WebBlock Project v2): name 2–120 characters,
+    /// description empty or 10–300 characters.
+    static let nameRange = 2...120
+    static let descriptionRange = 10...300
+
+    var nameError: String? {
+        let count = name.trimmingCharacters(in: .whitespacesAndNewlines).count
+        if count == 0 { return "Enter a product name." }
+        if !Self.nameRange.contains(count) { return "Use 2 to 120 characters." }
+        return nil
+    }
+    var descriptionError: String? {
+        let count = description.trimmingCharacters(in: .whitespacesAndNewlines).count
+        if count == 0 || Self.descriptionRange.contains(count) { return nil }
+        return count < Self.descriptionRange.lowerBound
+            ? "Write at least 10 characters, or leave it empty."
+            : "Keep it to 300 characters (now \(count))."
+    }
     var categoryError: String? { category.isEmpty ? "Choose a category." : nil }
     var priceError: String? { (price ?? -1) < 0 ? "Enter a price, for example 6.00." : nil }
-    var isValid: Bool { nameError == nil && categoryError == nil && priceError == nil }
+    var isValid: Bool { nameError == nil && categoryError == nil && priceError == nil && descriptionError == nil }
 
     var product: Product {
-        Product(id: id, name: name.trimmingCharacters(in: .whitespaces), category: category,
-                description: description, price: price ?? 0, photoData: photoData, imageName: imageName)
+        Product(id: id, name: name.trimmingCharacters(in: .whitespacesAndNewlines), category: category,
+                description: description.trimmingCharacters(in: .whitespacesAndNewlines),
+                price: price ?? 0, photoData: photoData, imageName: imageName)
     }
 }
 

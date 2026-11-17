@@ -49,7 +49,7 @@ private struct CardPressBody: View {
             .overlay(alignment: .bottomTrailing) {
                 if spotify {
                     Image(systemName: "arrow.right")
-                        .font(.system(size: 16, weight: .bold))
+                        .wbFont(16, .bold)
                         .foregroundStyle(.white)
                         .frame(width: 40, height: 40)
                         .background(Color.wbBrand, in: Circle())
@@ -97,61 +97,78 @@ extension View {
     func appearAnimated(index: Int = 0) -> some View { modifier(AppearModifier(index: index)) }
 }
 
-// MARK: - Buttons (pill-shaped, like the Figma "Sign in" and "Add product" buttons)
+// MARK: - Buttons
+//
+// One medium size (48 pt) for every action button, so screens line up. The main action comes first and widest;
+// a secondary or destructive action sits after it and can hug its label (`.wbSecondaryCompact`,
+// `.wbDestructiveCompact`) so the main action stays the obvious one.
 
+enum ButtonMetrics {
+    static let height: CGFloat = 48
+    static let compactPadding: CGFloat = 20
+}
+
+/// Brand-blue capsule with white text: the one main action on a screen.
 struct PrimaryButtonStyle: ButtonStyle {
-    var height: CGFloat = 38
+    var height: CGFloat = ButtonMetrics.height
     @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.body.weight(.semibold))
             .foregroundStyle(.white)
+            .lineLimit(1)
+            .padding(.horizontal, ButtonMetrics.compactPadding)
             .frame(maxWidth: .infinity, minHeight: height)
             .brandFace(in: Capsule())
-            .opacity(isEnabled ? (configuration.isPressed ? 0.9 : 1) : 0.45)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.88 : 1) : 0.45)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
+            .animation(.spring(response: 0.28, dampingFraction: 0.75), value: configuration.isPressed)
             .animation(.easeInOut(duration: 0.2), value: isEnabled)
+            .sensoryFeedback(.impact(weight: .light), trigger: configuration.isPressed) { _, new in new }
             .hoverEffect(.highlight)
     }
 }
 
+/// Tinted capsule (brand or red) for secondary and destructive actions. Adapts to Dark Mode.
 struct SecondaryButtonStyle: ButtonStyle {
     var destructive = false
-    var height: CGFloat = 38
+    var height: CGFloat = ButtonMetrics.height
+    /// `false` hugs the label instead of filling the row.
+    var fills = true
     @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
+        let tint = destructive ? Color.wbRed : Color.wbBrand
         configuration.label
             .font(.body.weight(.semibold))
-            .foregroundStyle(destructive ? Color.wbRed : Color(hex: 0x3862B6))
-            .frame(maxWidth: .infinity, minHeight: height)
-            // White glass: bright fill, light rim, soft shadow. Destructive shares Cancel's look; only the text is red.
-            .background(Color.white, in: Capsule())
-            .overlay(Capsule().strokeBorder(
-                LinearGradient(colors: [.white, Color(hex: 0x3F72D0).opacity(0.16), .white],
-                               startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.2))
-            .shadow(color: Color(hex: 0x1F3C7A).opacity(0.10), radius: 8, y: 3)
-            .opacity(isEnabled ? 1 : 0.5)
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .padding(.horizontal, ButtonMetrics.compactPadding)
+            .frame(maxWidth: fills ? .infinity : nil, minHeight: height)
+            .background(tint.opacity(configuration.isPressed ? 0.16 : 0.10), in: Capsule())
+            .overlay(Capsule().strokeBorder(tint.opacity(0.18), lineWidth: 1))
+            .fixedSize(horizontal: !fills, vertical: false)
+            .opacity(isEnabled ? 1 : 0.45)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
+            .animation(.spring(response: 0.28, dampingFraction: 0.75), value: configuration.isPressed)
             .hoverEffect(.highlight)
     }
 }
 
-/// Small white glass pill for text buttons in a toolbar (Cancel, Done…), instead of the grey system capsule.
+/// Small text button for bars (Cancel, Done…): a 34 pt tinted capsule inside a 44 pt tap area.
 struct GlassBarButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.dm(15, 600))
-            .foregroundStyle(Color(hex: 0x3862B6))
-            .padding(.horizontal, 16).padding(.vertical, 8)
-            .background(Color.white, in: Capsule())
-            .overlay(Capsule().strokeBorder(
-                LinearGradient(colors: [.white, Color(hex: 0x3F72D0).opacity(0.16), .white],
-                               startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.2))
-            .shadow(color: Color(hex: 0x1F3C7A).opacity(0.10), radius: 6, y: 2)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color.wbBrand)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 34)
+            .background(Color.wbCard, in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.wbBrand.opacity(0.16), lineWidth: 1))
+            .shadow(color: Color(hex: 0x1F3C7A).opacity(0.08), radius: 6, y: 2)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
+            .animation(.spring(response: 0.28, dampingFraction: 0.75), value: configuration.isPressed)
     }
 }
 
@@ -161,17 +178,41 @@ extension ButtonStyle where Self == GlassBarButtonStyle {
 
 extension ButtonStyle where Self == PrimaryButtonStyle {
     static var wbPrimary: PrimaryButtonStyle { .init() }
-    /// Same 50 pt height as the text fields, for buttons that sit under a form.
-    static var wbPrimaryField: PrimaryButtonStyle { .init(height: 50) }
+    /// Kept for existing call sites; the same medium size as every other action button.
+    static var wbPrimaryField: PrimaryButtonStyle { .init() }
 }
 extension ButtonStyle where Self == SecondaryButtonStyle {
     static var wbSecondary: SecondaryButtonStyle { .init() }
     static var wbDestructive: SecondaryButtonStyle { .init(destructive: true) }
-    static var wbSecondaryField: SecondaryButtonStyle { .init(height: 50) }
-    static var wbDestructiveField: SecondaryButtonStyle { .init(destructive: true, height: 50) }
+    static var wbSecondaryField: SecondaryButtonStyle { .init() }
+    static var wbDestructiveField: SecondaryButtonStyle { .init(destructive: true) }
+    /// Hugs its label: for the secondary action beside a main one.
+    static var wbSecondaryCompact: SecondaryButtonStyle { .init(fills: false) }
+    static var wbDestructiveCompact: SecondaryButtonStyle { .init(destructive: true, fills: false) }
 }
 
 /// Primary button that swaps its label for a spinner while work is running.
+/// Lays its children out in a row and gives every one exactly the same width, whatever their labels.
+struct EqualWidthRow: Layout {
+    var spacing: CGFloat = Space.s
+    private func width(_ subviews: Subviews, _ total: CGFloat) -> CGFloat {
+        guard !subviews.isEmpty else { return 0 }
+        return (total - spacing * CGFloat(subviews.count - 1)) / CGFloat(subviews.count)
+    }
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let w = width(subviews, proposal.width ?? 320)
+        let h = subviews.map { $0.sizeThatFits(.init(width: w, height: nil)).height }.max() ?? 0
+        return CGSize(width: proposal.width ?? 320, height: h)
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let w = width(subviews, bounds.width)
+        for (i, v) in subviews.enumerated() {
+            v.place(at: CGPoint(x: bounds.minX + CGFloat(i) * (w + spacing), y: bounds.minY),
+                    proposal: .init(width: w, height: bounds.height))
+        }
+    }
+}
+
 struct LoadingButton: View {
     let title: String
     var isLoading = false
@@ -202,6 +243,8 @@ struct Pill: View {
             if let symbol { Image(systemName: symbol).imageScale(.small) }
             Text(uppercase ? text.uppercased() : text)
         }
+        .lineLimit(1)
+        .fixedSize()
         .font(uppercase ? .caption2.weight(.bold) : .caption.weight(.medium))
         .foregroundStyle(tint)
         .padding(.horizontal, 10).padding(.vertical, 4)
@@ -513,6 +556,14 @@ extension View {
             }
         }
         .animation(.snappy, value: toast.wrappedValue)
+        .sensoryFeedback(trigger: toast.wrappedValue?.id) { _, new in
+            guard new != nil, let kind = toast.wrappedValue?.kind else { return nil }
+            switch kind {
+            case .success: return .success
+            case .warning: return .warning
+            case .error: return .error
+            }
+        }
     }
 }
 
@@ -622,7 +673,7 @@ struct OpeningHoursEditor: View {
                     withAnimation(.snappy) { expanded = isExpanded ? nil : day.wrappedValue.id }
                 } label: {
                     HStack(spacing: Space.s) {
-                        Image(systemName: "calendar").font(.system(size: 18, weight: .medium))
+                        Image(systemName: "calendar").wbFont(18, .medium)
                             .foregroundStyle(day.wrappedValue.isOpen ? Color.wbBrand : Color.wbMuted)
                             .frame(width: 44, height: 44)
                             .background(Color.wbBrandSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -770,8 +821,8 @@ struct GlassDock: View {
                     ForEach(items.indices, id: \.self) { i in
                         let on = i == index
                         VStack(spacing: 3) {
-                            Image(systemName: items[i].symbol).font(.system(size: 20, weight: .medium)).frame(height: 24)
-                            Text(items[i].title).font(.system(size: 10.5, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.8)
+                            Image(systemName: items[i].symbol).wbFont(20, .medium).frame(height: 24)
+                            Text(items[i].title).wbFont(10.5, .semibold).lineLimit(1).minimumScaleFactor(0.8)
                         }
                         .foregroundStyle(on ? Color.wbBrand : Color.wbText.opacity(0.85))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -810,6 +861,7 @@ struct GlassDock: View {
             .animation(reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 0.8), value: selection)
         }
         .frame(height: barHeight)
+        .dynamicTypeSize(...DynamicTypeSize.xLarge)   // fixed-height bar, like the system tab bar
         .padding(.horizontal, 28)
         .padding(.bottom, -12)             // sits low, close to the home indicator
         .sensoryFeedback(.selection, trigger: selection)
@@ -832,7 +884,7 @@ struct WBSegmented<Value: Hashable>: View {
                     withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { selection = options[i].value }
                 } label: {
                     Text(options[i].label)
-                        .font(.dm(16, on ? 700 : 500))
+                        .font(.dm(16, 600))
                         .foregroundStyle(on ? Color(hex: 0x3862B6) : Color(hex: 0x5F6B85))
                         .frame(maxWidth: .infinity, minHeight: 42)
                         .background {
@@ -906,18 +958,21 @@ struct WBConfirm: View {
         ZStack {
             Color.black.opacity(0.35).ignoresSafeArea().onTapGesture(perform: onCancel)
             VStack(spacing: Space.s) {
-                Text(title).font(.dm(19, 700)).foregroundStyle(Color(hex: 0x1F2A4D))
+                Text(title).font(.headline).foregroundStyle(.wbText)
                     .multilineTextAlignment(.center)
-                Text(message).font(.dm(15, 400)).foregroundStyle(Color(hex: 0x5F6B85))
-                    .multilineTextAlignment(.center).lineSpacing(3)
+                Text(message).font(.subheadline).foregroundStyle(.wbMuted)
+                    .multilineTextAlignment(.center).lineSpacing(2)
+                // Alert order: Cancel, then the destructive action in solid red.
                 HStack(spacing: Space.s) {
-                    Button("Cancel", action: onCancel).buttonStyle(.wbSecondaryField)
+                    Button("Cancel", action: onCancel).buttonStyle(.wbSecondary)
                     Button(action: onConfirm) {
                         Text(confirmTitle).font(.body.weight(.semibold)).foregroundStyle(.white)
-                            .lineLimit(1).minimumScaleFactor(0.8)
-                            .frame(maxWidth: .infinity, minHeight: 50)
-                            .background(Color.wbRed, in: Capsule())
-                            .shadow(color: Color.wbRed.opacity(0.3), radius: 8, y: 3)
+                            .lineLimit(1).minimumScaleFactor(0.85)
+                            .padding(.horizontal, Space.s)
+                            .frame(maxWidth: .infinity, minHeight: ButtonMetrics.height)
+                            // Solid red that keeps white text readable in both appearances.
+                            .background(Color(light: 0xD23B3B, dark: 0xC0392B), in: Capsule())
+                            .shadow(color: Color.wbRed.opacity(0.25), radius: 8, y: 3)
                     }
                     .buttonStyle(.wbCardPress)
                 }
@@ -925,7 +980,7 @@ struct WBConfirm: View {
             }
             .padding(Space.l)
             .frame(maxWidth: 340)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .background(Color.wbCard, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
             .shadow(color: .black.opacity(0.18), radius: 24, y: 10)
             .padding(.horizontal, Space.screen)
         }
@@ -966,7 +1021,7 @@ struct WBIconSegmented<Value: Hashable>: View {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { selection = options[i].value }
                 } label: {
                     Image(systemName: options[i].symbol)
-                        .font(.system(size: 16, weight: .semibold))
+                        .wbFont(16, .semibold)
                         .foregroundStyle(on ? Color.wbText : Color.wbMuted)
                         .frame(width: 54, height: 42)
                         .background {
@@ -999,6 +1054,8 @@ struct WBEmptyState: View {
     let message: String
     var actionTitle: String? = nil
     var action: (() -> Void)? = nil
+    /// The gentle up-and-down float of the illustration; turn off for a still version.
+    var floats = true
     @State private var float = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -1011,16 +1068,16 @@ struct WBEmptyState: View {
                     .fill(LinearGradient(colors: [Color(hex: 0x6C9BEA), .wbBrand], startPoint: .top, endPoint: .bottom))
                     .frame(width: 76, height: 76)
                     .shadow(color: .wbBrand.opacity(0.35), radius: 12, y: 6)
-                Image(systemName: symbol).font(.system(size: 30, weight: .semibold)).foregroundStyle(.white)
+                Image(systemName: symbol).wbFont(30, .semibold).foregroundStyle(.white)
                 // little sparkles around the circles
-                Image(systemName: "sparkle").font(.system(size: 14, weight: .bold)).foregroundStyle(Color(hex: 0x8B5CF6))
+                Image(systemName: "sparkle").wbFont(14, .bold).foregroundStyle(Color(hex: 0x8B5CF6))
                     .offset(x: 62, y: -50)
                 Circle().fill(Color.wbBrand.opacity(0.35)).frame(width: 8, height: 8).offset(x: -66, y: 38)
                 Circle().fill(Color(hex: 0x8B5CF6).opacity(0.35)).frame(width: 6, height: 6).offset(x: -48, y: -60)
             }
-            .offset(y: float ? -4 : 4)
+            .offset(y: floats ? (float ? -4 : 4) : 0)
             .onAppear {
-                guard !reduceMotion else { return }
+                guard floats, !reduceMotion else { return }
                 withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) { float = true }
             }
             .accessibilityHidden(true)
@@ -1065,7 +1122,8 @@ struct BrandLogo: View {
         HStack(spacing: height * 0.2) {
             Image("webblocks-mark").resizable().interpolation(.high).scaledToFit()
                 .frame(height: height)
-            (Text("Web").foregroundStyle(Color(hex: 0x151A2C)) + Text("Blocks").foregroundStyle(Color(hex: 0x5B5BF6)))
+            // "Web" switches to a light ink in Dark Mode so it stays readable.
+            (Text("Web").foregroundStyle(Color(light: 0x151A2C, dark: 0xEAF0FB)) + Text("Blocks").foregroundStyle(Color(hex: 0x5B5BF6)))
                 .font(.system(size: height * 0.46, weight: .bold, design: .rounded))
                 .lineLimit(1).fixedSize()
         }
